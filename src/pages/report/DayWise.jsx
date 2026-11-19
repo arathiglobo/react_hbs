@@ -14,6 +14,8 @@ import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
+import { getPaginationItems } from "../../utils/paginationItems";
+import { compactFilters, emailSentMessage, emailErrorMessage } from "../../utils/reportEmail";
 
 
 function DayWise() {
@@ -32,7 +34,8 @@ function DayWise() {
    const [showMailModal, setShowMailModal] = useState(false);
    const [emailAddress, setEmailAddress] = useState("");
    const [isSending, setIsSending] = useState(false);
-   const [reportType,setReportType] = useState(null);
+   // Inhouse is the only report type offered (API is hidden), so it is selected from the start
+   const [reportType,setReportType] = useState('inhouse');
 
     // Temporary filter states (what user sees/edits)
      const [tempSelectedhotel,setTempSelectedHotel]= useState("");
@@ -77,6 +80,8 @@ function DayWise() {
     bookingType: "",
    };
    const [tempBookingFilters, setTempBookingFilters] = useState(initialBookingFilters);
+   // Booking filters of the last Search — what the table shows, and what Mail sends
+   const [appliedBookingFilters, setAppliedBookingFilters] = useState(initialBookingFilters);
 
    // Branch dropdown options (distinct booking locations)
    const [branchOptions, setBranchOptions] = useState([]);
@@ -152,30 +157,34 @@ const handleSendEmail = async () => {
 
   setIsSending(true);
   try {
-    // Get the filtered bookings count to include in the email
-    const filteredCount = reportType === 'inhouse' 
-      ? filteredinhouseBookings.length 
-      : filteredapiBookings.length;
-    
-    // API call to send email
+    // Booking filters of the last Search, the Stay Details filters and the
+    // "search here" text — the backend re-runs the report with them
     const response = await axiosInstance.post('/api/reports/send-email', {
-      email: emailAddress,
+      email: emailAddress.trim(),
       reportType: 'daywise',
       subType: reportType, // 'inhouse' or 'api'
-      filters: {
-        searchQuery: reportType === 'inhouse' ? inHouseSearchQuery : apiSearchQuery,
-      },
-      recordCount: filteredCount
+      filters: reportType === 'inhouse'
+        ? compactFilters(appliedBookingFilters, {
+            stayFromDate: fromDate,
+            stayToDate: toDate,
+            hotelId: selectedhotel,
+            hotelTypeId: selectedhoteltype,
+            roomCategoryName: roomCategory
+              ? roomCategoryOptions.find((opt) => String(opt.id) === String(roomCategory))?.name
+              : undefined,
+            searchQuery: inHouseSearchQuery,
+          })
+        : compactFilters({ searchQuery: apiSearchQuery }),
     });
 
     if (response.data) {
-      toast.success(`Report with ${filteredCount} record(s) sent successfully!`);
+      toast.success(emailSentMessage(response.data));
       setShowMailModal(false);
       setEmailAddress("");
     }
   } catch (error) {
     console.error("Email send error:", error);
-    toast.error(error.response?.data?.message || "Failed to send email");
+    toast.error(emailErrorMessage(error));
   } finally {
     setIsSending(false);
   }
@@ -352,11 +361,13 @@ const handleSearch = async () => {
   setInhouseCurrentPage(1);
   setApiCurrentPage(1);
   // Booking-level filters are applied server-side
+  setAppliedBookingFilters(tempBookingFilters);
   await fetchInhouse(tempBookingFilters);
  };
 
 const handleReset = async () => {
   setTempBookingFilters(initialBookingFilters);
+  setAppliedBookingFilters(initialBookingFilters);
   setTempSelectedHotel("");
   setTempSelectedHoteltype("");
   setTempRoomCategory("");
@@ -585,6 +596,7 @@ const filteredinhouseBookings = useMemo(() => {
                       type="radio"
                       label="Inhouse"
                       name="reportType"
+                      checked={reportType === 'inhouse'}
                       onChange={() => setReportType('inhouse')}
                     />
                     <Form.Check
@@ -592,6 +604,7 @@ const filteredinhouseBookings = useMemo(() => {
                       label="API"
                       name="reportType"
                      style={{display:"none"}}
+                      checked={reportType === 'api'}
                       onChange={() => setReportType('api')}
                     />
                   </div>
@@ -624,7 +637,7 @@ const filteredinhouseBookings = useMemo(() => {
           </div>
         </Form.Group>
       </Col>
-      <Col md={4}>
+      {/* <Col md={4}>
         <Form.Group className="mb-0">
           <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
           <div className="d-flex gap-2">
@@ -636,7 +649,7 @@ const filteredinhouseBookings = useMemo(() => {
               onChange={(e) => updateBookingFilter("deadlineDateTo", e.target.value)} />
           </div>
         </Form.Group>
-      </Col>
+      </Col> */}
       <Col md={4}>
         <Form.Group className="mb-0">
           <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
@@ -665,33 +678,33 @@ const filteredinhouseBookings = useMemo(() => {
           </div>
         </Form.Group>
       </Col>
-      <Col md={8} />
+      {/* <Col md={8} /> */}
 
       {/* Row 3 — reference / guest text filters */}
-      <Col md={4}>
+      {/* <Col md={4}>
         <Form.Control size="sm" placeholder="Booking Reference"
           value={tempBookingFilters.bookingReference}
           onChange={(e) => updateBookingFilter("bookingReference", e.target.value)} />
-      </Col>
-      <Col md={4}>
+      </Col> */}
+      {/* <Col md={4}>
         <Form.Control size="sm" placeholder="Supplier Reference No."
           value={tempBookingFilters.supplierReference}
           onChange={(e) => updateBookingFilter("supplierReference", e.target.value)} />
-      </Col>
-      <Col md={4}>
+      </Col> */}
+      {/* <Col md={4}>
         <Form.Control size="sm" placeholder="Guest Name"
           value={tempBookingFilters.guestName}
           onChange={(e) => updateBookingFilter("guestName", e.target.value)} />
-      </Col>
+      </Col> */}
 
       {/* Row 4 — city / branch / status */}
-      <Col md={4}>
+      {/* <Col md={4}>
         <DestinationCity
           value={tempBookingFilters.city}
           onChange={(cityName) => updateBookingFilter("city", cityName)}
         />
-      </Col>
-      <Col md={4}>
+      </Col> */}
+      {/* <Col md={4}>
         <Form.Select size="sm"
           value={tempBookingFilters.branch}
           onChange={(e) => updateBookingFilter("branch", e.target.value)}>
@@ -700,8 +713,8 @@ const filteredinhouseBookings = useMemo(() => {
             <option key={branch} value={branch}>{branch}</option>
           ))}
         </Form.Select>
-      </Col>
-      <Col md={4}>
+      </Col> */}
+      {/* <Col md={4}>
         <Form.Select size="sm"
           value={tempBookingFilters.status}
           onChange={(e) => updateBookingFilter("status", e.target.value)}>
@@ -712,7 +725,7 @@ const filteredinhouseBookings = useMemo(() => {
           <option value="SOLD_OUT">Sold Out</option>
           <option value="CANCELLED">Cancelled</option>
         </Form.Select>
-      </Col>
+      </Col> */}
 
       {/* Row 5 — supplier / service type */}
       <Col md={4}>
@@ -779,22 +792,27 @@ const filteredinhouseBookings = useMemo(() => {
                   />
       </Col>
 
-      {/* Search / Reset Buttons */}
-      <Col md={3}>
-        <div className="d-flex gap-2">
-          <Button variant="success" className="w-50" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
-            <i className="fas fa-search me-1"></i>Search
-          </Button>
-          <Button variant="outline-secondary" className="w-50" size="sm" onClick={handleReset}>
-            <i className="fas fa-undo me-1"></i>Reset
-          </Button>
-        </div>
-      </Col>
+      
     </Row>
 
-    {/* Action Buttons */}
-    <Row className="mt-4">
-      <Col md={12} className="d-flex gap-2 justify-content-end">
+    {/* Table search on the left; Search / Reset next to the export buttons */}
+    <Row className="mt-4 align-items-center g-2">
+      <Col md={2}>
+        <input
+          type="text"
+          value={inHouseSearchQuery}
+          onChange={(e)=>setInHouseSearchQuery(e.target.value)}
+          placeholder="search here"
+          className="form-control form-control-sm"
+        />
+      </Col>
+      <Col md={10} className="d-flex flex-wrap gap-2 justify-content-end">
+        <Button variant="success" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767", minWidth: 120 }} onClick={handleSearch}>
+          <i className="fas fa-search me-1"></i>Search
+        </Button>
+        <Button variant="outline-secondary" size="sm" style={{ minWidth: 120 }} onClick={handleReset}>
+          <i className="fas fa-undo me-1"></i>Reset
+        </Button>
         <Button variant="outline-primary" size="sm" onClick={() => setShowMailModal(true)}>
           <i className="fas fa-envelope me-1"></i>Mail
         </Button>
@@ -811,7 +829,7 @@ const filteredinhouseBookings = useMemo(() => {
     </Row>
 
     {/* Search Input */}
-    <Row className="mt-3">
+    {/* <Row className="mt-3">
       <Col className="d-flex justify-content-end">
         <input
           type="text"
@@ -821,7 +839,7 @@ const filteredinhouseBookings = useMemo(() => {
           className="form-control form-control-sm w-auto"
         />
       </Col>
-    </Row>
+    </Row> */}
   </>
 )}
 
@@ -977,27 +995,19 @@ const filteredinhouseBookings = useMemo(() => {
                         <Pagination.Prev onClick={()=>setInhouseCurrentPage(prev=> Math.max(1,prev-1))} 
                           disabled={inhousecurrentPage===1}/>
 
-                        {Array.from({length:Inhousetotalpages},(_,i) => i+1).map((pageNum)=>{
-                          if(
-                            pageNum === 1||
-                            pageNum === Inhousetotalpages ||
-                            (pageNum >= inhousecurrentPage -1&&pageNum<=inhousecurrentPage+1)
-                          ){
-                            return(
-                              <Pagination.Item
-                              key={pageNum}
-                              active={pageNum===inhousecurrentPage}
-                              onClick={()=>setInhouseCurrentPage(pageNum)}>
-                                {pageNum}
-                              </Pagination.Item>
-                            )
-                          }else if(
-                            pageNum === inhousecurrentPage -2||
-                            pageNum === inhousecurrentPage +2
-                          ){
-                            return <Pagination.Ellipsis key={pageNum}/>
-                          }return null;
-                        })}
+                        {getPaginationItems(Inhousetotalpages, inhousecurrentPage).map((item) =>
+                          typeof item === "string" ? (
+                            <Pagination.Ellipsis key={item} disabled />
+                          ) : (
+                            <Pagination.Item
+                              key={item}
+                              active={item === inhousecurrentPage}
+                              onClick={() => setInhouseCurrentPage(item)}
+                            >
+                              {item}
+                            </Pagination.Item>
+                          )
+                        )}
                         
                         <Pagination.Next onClick={()=> setInhouseCurrentPage(prev=>Math.min(Inhousetotalpages,prev+1))}
                           disabled={inhousecurrentPage === Inhousetotalpages || Inhousetotalpages === 0}  />
@@ -1051,28 +1061,19 @@ const filteredinhouseBookings = useMemo(() => {
                         <Pagination.Prev onClick={()=> setApiCurrentPage(prev =>Math.max(1,prev -1))}
                           disabled={apicurrentPage === 1}/>
 
-                        {Array.from({length:Apitotalpages},(_,i)=>i+1).map((pageNum)=>{
-                          if(
-                            pageNum ===1||
-                            pageNum ===Apitotalpages||
-                            (pageNum >= apicurrentPage -1 && pageNum<=apicurrentPage+1)
-                          ){
-                            return(
-                              <Pagination.Item
-                              key={pageNum}
-                              active={pageNum===apicurrentPage}
-                              onClick={()=>setApiCurrentPage(pageNum)}>
-                                {pageNum}
-                              </Pagination.Item>
-                            )}
-                          else if(
-                            pageNum === apicurrentPage -2||
-                            pageNum === apicurrentPage +2
-                          ){
-                            return <Pagination.Ellipsis key={pageNum}/>
-                          }
-                          return null;
-                        })}
+                        {getPaginationItems(Apitotalpages, apicurrentPage).map((item) =>
+                          typeof item === "string" ? (
+                            <Pagination.Ellipsis key={item} disabled />
+                          ) : (
+                            <Pagination.Item
+                              key={item}
+                              active={item === apicurrentPage}
+                              onClick={() => setApiCurrentPage(item)}
+                            >
+                              {item}
+                            </Pagination.Item>
+                          )
+                        )}
 
                         <Pagination.Next onClick={()=> setApiCurrentPage(prev =>Math.min(Apitotalpages,prev +1))}
                           disabled={apicurrentPage === Apitotalpages || Apitotalpages ===0}/>

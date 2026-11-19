@@ -22,6 +22,8 @@ import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
+import { getPaginationItems } from "../../utils/paginationItems";
+import { compactFilters, emailSentMessage, emailErrorMessage } from "../../utils/reportEmail";
 
 export default function CancellationReport() {
 
@@ -58,6 +60,8 @@ export default function CancellationReport() {
 
     // Temporary filter state (what user sees/edits)
     const [tempFilters, setTempFilters] = useState(initialFilters);
+    // Filters of the last Search — what the table shows, and what Mail sends
+    const [appliedFilters, setAppliedFilters] = useState(initialFilters);
 
     // Branch dropdown options, collected from the unfiltered list
     const [branchOptions, setBranchOptions] = useState([]);
@@ -114,20 +118,18 @@ export default function CancellationReport() {
       try {
         // API call to send email
         const response = await axiosInstance.post('/api/reports/send-email', {
-          email: emailAddress,
+          email: emailAddress.trim(),
           reportType: 'cancellation',
-          filters: {
-            // add your filter data here
-          }
+          filters: compactFilters(appliedFilters, { searchQuery }),
         });
-    
+
         if (response.data) {
-          toast.success("Report sent successfully!");
+          toast.success(emailSentMessage(response.data));
           setShowMailModal(false);
           setEmailAddress("");
         }
       } catch (error) {
-        toast.error("Failed to send email");
+        toast.error(emailErrorMessage(error));
       } finally {
         setIsSending(false);
       }
@@ -135,11 +137,13 @@ export default function CancellationReport() {
 
     const handleSearch = async ()=>{
       setCurrentPage(1);
+      setAppliedFilters(tempFilters);
       await fetchCancellation(tempFilters);
     }
 
     const handleReset = async ()=>{
       setTempFilters(initialFilters);
+      setAppliedFilters(initialFilters);
       setSearchQuery("");
       setCurrentPage(1);
       await fetchCancellation();
@@ -271,6 +275,7 @@ export default function CancellationReport() {
   const startIndex = useMemo(()=>(currentPage -1)*itemsPerPage, [currentPage,itemsPerPage]);
   const endIndex = useMemo(()=>startIndex+itemsPerPage,[startIndex,itemsPerPage]);
   const currentBookings = useMemo(()=>filteredcancellation.slice(startIndex,endIndex),[filteredcancellation,startIndex,endIndex])
+  const paginationItems = useMemo(() => getPaginationItems(totalPages, currentPage), [totalPages, currentPage]);
 
 
   return (
@@ -291,7 +296,7 @@ export default function CancellationReport() {
               <Row className="align-items-end g-4">
 
                 {/* Row 1 — Service / Booking / Cancellation Deadline dates */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Service Date</Form.Label>
                     <div className="d-flex gap-2">
@@ -303,7 +308,7 @@ export default function CancellationReport() {
                         onChange={(e) => updateFilter("serviceDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
+                </Col> */}
                 <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Booking Date</Form.Label>
@@ -332,7 +337,7 @@ export default function CancellationReport() {
                 </Col>
 
                 {/* Row 2 — Reconfirm / Cancel dates */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
                     <div className="d-flex gap-2">
@@ -344,7 +349,7 @@ export default function CancellationReport() {
                         onChange={(e) => updateFilter("reconfirmDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
+                </Col> */}
                 <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Cancel Date</Form.Label>
@@ -358,7 +363,7 @@ export default function CancellationReport() {
                     </div>
                   </Form.Group>
                 </Col>
-                <Col md={4} />
+                {/* <Col md={4} /> */}
 
                 {/* Row 3 — reference / city text filters */}
                 <Col md={4}>
@@ -366,11 +371,11 @@ export default function CancellationReport() {
                     value={tempFilters.bookingReference}
                     onChange={(e) => updateFilter("bookingReference", e.target.value)} />
                 </Col>
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Supplier Reference No."
                     value={tempFilters.supplierReference}
                     onChange={(e) => updateFilter("supplierReference", e.target.value)} />
-                </Col>
+                </Col> */}
                 <Col md={4}>
                   <DestinationCity
                     value={tempFilters.city}
@@ -384,11 +389,11 @@ export default function CancellationReport() {
                     value={tempFilters.guestName}
                     onChange={(e) => updateFilter("guestName", e.target.value)} />
                 </Col>
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Service Name"
                     value={tempFilters.serviceName}
                     onChange={(e) => updateFilter("serviceName", e.target.value)} />
-                </Col>
+                </Col> */}
                 <Col md={4}>
                   <Form.Select size="sm"
                     value={tempFilters.branch}
@@ -416,72 +421,41 @@ export default function CancellationReport() {
                     <option value="LAST_MINUTE">Last Minute</option>
                   </Form.Select>
                 </Col>
-                <Col md={4} />
+                {/* <Col md={4} /> */}
 
-                {/* Row 6 — actions */}
-                <Col md={4}>
-                  <Button variant="success" className="w-100" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
+              </Row>
+
+              {/* Table search on the left; Search / Reset next to the export buttons */}
+              <Row className="mt-4 align-items-center g-2">
+                <Col md={2}>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search"
+                    className="form-control form-control-sm"
+                  />
+                </Col>
+                <Col md={10} className="d-flex flex-wrap gap-2 justify-content-end">
+                  <Button variant="success" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767", minWidth: 120 }} onClick={handleSearch}>
                     <i className="fas fa-search me-1"></i>Search
                   </Button>
-                </Col>
-                <Col md={4}>
-                  <Button variant="outline-secondary" className="w-100" size="sm" onClick={handleReset}>
+                  <Button variant="outline-secondary" size="sm" style={{ minWidth: 120 }} onClick={handleReset}>
                     <i className="fas fa-undo me-1"></i>Reset
                   </Button>
+                  <Button variant="outline-primary" size="sm" onClick={() => setShowMailModal(true)}>
+                    <i className="fas fa-envelope me-1"></i>Mail
+                  </Button>
+                  <Button variant="outline-secondary" size="sm" onClick={handlePrint}>
+                    <i className="fas fa-print me-1"></i>Print
+                  </Button>
+                  <Button variant="outline-danger" size="sm" onClick={handlePDF}>
+                    <i className="fas fa-file-pdf me-1"></i>PDF
+                  </Button>
+                  <Button variant="outline-success" size="sm" onClick={handleExcel}>
+                    <i className="fas fa-file-excel me-1"></i>Excel
+                  </Button>
                 </Col>
-                <Col md={12} className="mt-4">
-  <div className="d-flex justify-content-between align-items-center">
-    
-    {/* LEFT SIDE - SEARCH */}
-    <div>
-      <input
-        type="text"
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder="Search"
-        className="form-control form-control-sm"
-        style={{ width: "200px" }}
-      />
-    </div>
-
-    {/* RIGHT SIDE - BUTTONS */}
-    <div className="d-flex gap-2">
-      <Button
-        variant="outline-primary"
-        size="sm"
-        onClick={() => setShowMailModal(true)}
-      >
-        <i className="fas fa-envelope me-1"></i>Mail
-      </Button>
-
-      <Button
-        variant="outline-secondary"
-        size="sm"
-        onClick={handlePrint}
-      >
-        <i className="fas fa-print me-1"></i>Print
-      </Button>
-
-      <Button
-        variant="outline-danger"
-        size="sm"
-        onClick={handlePDF}
-      >
-        <i className="fas fa-file-pdf me-1"></i>PDF
-      </Button>
-
-      <Button
-        variant="outline-success"
-        size="sm"
-        onClick={handleExcel}
-      >
-        <i className="fas fa-file-excel me-1"></i>Excel
-      </Button>
-    </div>
-
-  </div>
-</Col>
-
               </Row>
             </div>
 
@@ -533,30 +507,19 @@ export default function CancellationReport() {
                     <Pagination.Prev onClick={()=>setCurrentPage(prev =>Math.max(1,prev -1))}
                     disabled={currentPage === 1 } />
 
-                    {Array.from({length: totalPages},(_,i)=>i+1).map((pageNum)=>{
-                      if(
-                        pageNum ===1||
-                        pageNum === totalPages||
-                        (pageNum >= currentPage -1&&pageNum<=currentPage+1)
+                    {paginationItems.map((item) =>
+                      typeof item === "string" ? (
+                        <Pagination.Ellipsis key={item} disabled />
+                      ) : (
+                        <Pagination.Item
+                          key={item}
+                          active={item === currentPage}
+                          onClick={() => setCurrentPage(item)}
+                        >
+                          {item}
+                        </Pagination.Item>
                       )
-                      {
-                        return(
-                          <Pagination.Item
-                          key={pageNum}
-                              active={pageNum===currentPage}
-                              onClick={()=>setCurrentPage(pageNum)}>
-                              {pageNum}
-                          </Pagination.Item>
-                        )}
-                        else if(
-                          pageNum === currentPage -2 ||
-                          pageNum === currentPage +2 
-                        )
-                        {
-                          return <Pagination.Ellipsis key={pageNum}/>
-                        }
-                        return null;
-                    })}
+                    )}
                     <Pagination.Next onClick={()=> setCurrentPage(prev=> Math.min(totalPages, prev+1))}
                       disabled={currentPage ===totalPages ||totalPages=== 0}/>
                   </Pagination>

@@ -27,6 +27,14 @@ import Place from "../../components/filters/place";
 import Supplier from "../../components/filters/Supplier";
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
+import { getPaginationItems } from "../../utils/paginationItems";
+import { hotelCategoryLabel } from "../../utils/hotelCategoryLabel";
+import { compactFilters, emailSentMessage, emailErrorMessage } from "../../utils/reportEmail";
+
+// Case- and whitespace-insensitive name comparison for report filters
+const sameName = (a, b) =>
+  String(a || "").trim().replace(/\s+/g, " ").toLowerCase() ===
+  String(b || "").trim().replace(/\s+/g, " ").toLowerCase();
 
 export default function HotelWise() {
 
@@ -54,6 +62,8 @@ export default function HotelWise() {
     bookingType: "",
   };
   const [tempBookingFilters, setTempBookingFilters] = useState(initialBookingFilters);
+  // Booking filters of the last Search — what the table shows, and what Mail sends
+  const [appliedBookingFilters, setAppliedBookingFilters] = useState(initialBookingFilters);
 
   // Branch dropdown options (distinct booking locations)
   const [branchOptions, setBranchOptions] = useState([]);
@@ -88,6 +98,9 @@ export default function HotelWise() {
   const [tempRegion,setTempRegion] =useState("");
   const [tempState,setTempState] =useState("");
   const [tempPlace,setTempPlace]= useState("");
+  // Names of the picked country/place: report rows only carry names, not ids
+  const [tempCountryName,setTempCountryName]=useState("");
+  const [tempPlaceName,setTempPlaceName]=useState("");
   const [tempSearchQuery,setTempSearchQuery]=useState("");
   
   // Applied filter states (used for actual filtering)
@@ -99,6 +112,8 @@ export default function HotelWise() {
   const [region,setRegion] =useState("");
   const [state,setState] =useState("");
   const [place,setPlace]= useState("");
+  const [countryName,setCountryName]=useState("");
+  const [placeName,setPlaceName]=useState("");
   const [searchQuery,setSearchQuery]=useState("");
   
   const [currentpage,setCurrentPage]=useState(1);
@@ -113,9 +128,7 @@ export default function HotelWise() {
   const [hotelCategoryOptions, setHotelCategoryOptions] = useState([]);
   const [roomCategoryOptions, setRoomCategoryOptions] = useState([]);
   const [regionOptions, setRegionOptions] = useState([]);
-  const [countryOptions, setCountryOptions] = useState([]);
   const [stateOptions, setStateOptions] = useState([]);
-  const [placeOptions, setPlaceOptions] = useState([]);
 
   
 
@@ -139,16 +152,16 @@ export default function HotelWise() {
     const fetchFilterOptions = async () => {
       try {
         // Fetch all filter options
-        const [hotelsRes, hotelTypesRes, hotelCategoriesRes, roomCategoriesRes, 
-               regionsRes, countriesRes, statesRes, placesRes] = await Promise.all([
+        // Country and Place are not looked up here: their dropdowns hand back
+        // the selected name directly (see the Country/Place onChange below).
+        const [hotelsRes, hotelTypesRes, hotelCategoriesRes, roomCategoriesRes,
+               regionsRes, statesRes] = await Promise.all([
           axiosInstance.get("/api/hotels").catch(() => ({ data: [] })),
           axiosInstance.get("/api/hotelType").catch(() => ({ data: [] })),
           axiosInstance.get("/api/hotelcategory").catch(() => ({ data: [] })),
           axiosInstance.get("/api/roomCategory").catch(() => ({ data: [] })),
           axiosInstance.get("/api/region").catch(() => ({ data: [] })),
-          axiosInstance.get("/api/country").catch(() => ({ data: [] })),
-          axiosInstance.get("/api/province").catch(() => ({ data: [] })),
-          axiosInstance.get("/api/destination?page=0&limit=1000").catch(() => ({ data: [] }))
+          axiosInstance.get("/api/province").catch(() => ({ data: [] }))
         ]);
 
         setHotelOptions(Array.isArray(hotelsRes.data) ? hotelsRes.data.map(h => ({ id: h.id, name: h.hotelName })) : []);
@@ -156,9 +169,7 @@ export default function HotelWise() {
         setHotelCategoryOptions(Array.isArray(hotelCategoriesRes.data) ? hotelCategoriesRes.data.map(hc => ({ id: hc.hotelCategoryId, name: hc.hotelCategory })) : []);
         setRoomCategoryOptions(Array.isArray(roomCategoriesRes.data) ? roomCategoriesRes.data.map(rc => ({ id: rc.roomCategoryId, name: rc.roomCategory })) : []);
         setRegionOptions(Array.isArray(regionsRes.data) ? regionsRes.data.map(r => ({ id: r.id || r.Id, name: r.name })) : []);
-        setCountryOptions(Array.isArray(countriesRes.data) ? countriesRes.data.map(c => ({ id: c.id || c.Id, name: c.name })) : []);
         setStateOptions(Array.isArray(statesRes.data) ? statesRes.data.filter(s => !s.isDeleted).map(s => ({ id: s.id, name: s.stateName })) : []);
-        setPlaceOptions(Array.isArray(placesRes.data) ? placesRes.data.filter(p => !p.isDeleted).map(p => ({ id: p.id, name: p.name })) : []);
       } catch (error) {
         console.error("Error fetching filter options:", error);
       }
@@ -177,35 +188,34 @@ export default function HotelWise() {
     }
     setIsSending(true);
     try {
-      // Get the filtered hotels count to include in the email
-      const filteredCount = filteredhotels.length;
-      
-      // API call to send email with current filtered data
+      // Report rows carry names, not ids, so the column filters go by name
+      // (category by id: the rows hold the category id)
+      const nameOf = (options, id) =>
+        id ? options.find((opt) => String(opt.id) === String(id))?.name : undefined;
       const response = await axiosInstance.post('/api/reports/send-email', {
-        email: emailAddress,
+        email: emailAddress.trim(),
         reportType: 'hotelwise',
-        filters: {
-          hotel: String(selectedhotel || ''),
-          hotelType: String(selectedhoteltype || ''),
-          hotelCategory: String(category || ''),
-          roomCategory: String(roomCategory || ''),
-          region: String(region || ''),
-          country: String(country || ''),
-          state: String(state || ''),
-          place: String(place || ''),
-          searchQuery: String(searchQuery || '')
-        },
-        recordCount: filteredCount // Include count of filtered records
+        filters: compactFilters(appliedBookingFilters, {
+          hotelName: nameOf(hotelOptions, selectedhotel),
+          hotelTypeName: nameOf(hotelTypeOptions, selectedhoteltype),
+          hotelCategoryId: category,
+          roomCategoryName: nameOf(roomCategoryOptions, roomCategory),
+          regionName: nameOf(regionOptions, region),
+          countryName: country ? countryName : undefined,
+          stateName: nameOf(stateOptions, state),
+          placeName: place ? placeName : undefined,
+          searchQuery,
+        }),
       });
 
       if (response.data) {
-        toast.success(`Report with ${filteredCount} record(s) sent successfully!`);
+        toast.success(emailSentMessage(response.data));
         setShowMailModal(false);
         setEmailAddress("");
       }
     } catch (error) {
       console.error("Email send error:", error);
-      toast.error(error.response?.data?.message || "Failed to send email");
+      toast.error(emailErrorMessage(error));
     } finally {
       setIsSending(false);
     }
@@ -247,7 +257,7 @@ export default function HotelWise() {
                   <td>${index +1}</td>
                   <td>${escapeHtml(h.hotelName)}</td>
                   <td>${escapeHtml(h.hotelType)}</td>
-                  <td>${escapeHtml(h.hotelCategory)}</td>
+                  <td>${escapeHtml(hotelCategoryLabel(h))}</td>
                   <td>${escapeHtml(h.roomCategory)}</td>
                   <td>${escapeHtml(h.region)}</td>
                   <td>${escapeHtml(h.country)}</td>
@@ -278,7 +288,7 @@ export default function HotelWise() {
         index + 1,
        h.hotelName,
        h.hotelType,
-       h.hotelCategory,
+       hotelCategoryLabel(h),
        h.roomCategory,
        h.region,
        h.country,
@@ -305,7 +315,7 @@ export default function HotelWise() {
         index + 1,
        h.hotelName,
        h.hotelType,
-       h.hotelCategory,
+       hotelCategoryLabel(h),
        h.roomCategory,
        h.region,
        h.country,
@@ -335,14 +345,18 @@ const handleSearch = async () => {
   setRegion(tempRegion);
   setState(tempState);
   setPlace(tempPlace);
+  setCountryName(tempCountryName);
+  setPlaceName(tempPlaceName);
   setSearchQuery(tempSearchQuery);
   setCurrentPage(1);
   // Booking-level filters are applied server-side
+  setAppliedBookingFilters(tempBookingFilters);
   await fetchHotels(tempBookingFilters);
  };
 
 const handleReset = async () => {
   setTempBookingFilters(initialBookingFilters);
+  setAppliedBookingFilters(initialBookingFilters);
   setTempSelectedHotel("");
   setTempSelectedHoteltype("");
   setTempCategory("");
@@ -351,6 +365,8 @@ const handleReset = async () => {
   setTempRegion("");
   setTempState("");
   setTempPlace("");
+  setTempCountryName("");
+  setTempPlaceName("");
   setTempSearchQuery("");
   setSelectedHotel("");
   setSelectedHoteltype("");
@@ -360,6 +376,8 @@ const handleReset = async () => {
   setRegion("");
   setState("");
   setPlace("");
+  setCountryName("");
+  setPlaceName("");
   setSearchQuery("");
   setCurrentPage(1);
   await fetchHotels();
@@ -375,7 +393,7 @@ const filteredhotels = useMemo(() => {
       const matchesSearch =
         String(h.hotelName || '').toLowerCase().includes(search) ||
         String(h.hotelType || '').toLowerCase().includes(search) ||
-        String(h.hotelCategory || '').toLowerCase().includes(search) ||
+        hotelCategoryLabel(h).toLowerCase().includes(search) ||
         String(h.roomCategory || '').toLowerCase().includes(search) ||
         String(h.region || '').toLowerCase().includes(search) ||
         String(h.country || '').toLowerCase().includes(search) ||
@@ -431,28 +449,16 @@ const filteredhotels = useMemo(() => {
       if (!matches) return false;
     }
 
-    // Filter 3: Hotel Category - match by ID first, then by name
+    // Filter 3: Hotel Category - rows carry the category id in hotelCategory
+    // (the filter's value); its name only matters for rows without an id
     if (category) {
       let matches = false;
-      
-      // First try to match by ID (most reliable)
-      if (h.hotelCategoryId && String(h.hotelCategoryId) === String(category)) {
-        matches = true;
+      if (h.hotelCategory !== null && h.hotelCategory !== undefined) {
+        matches = String(h.hotelCategory) === String(category);
       } else {
-        // If ID doesn't match or doesn't exist, try matching by name
         const selectedCategoryName = hotelCategoryOptions.find(opt => String(opt.id) === String(category))?.name;
-        if (selectedCategoryName) {
-          // Convert both to strings for comparison (handle number/string mismatch)
-          const hotelCategoryStr = String(h.hotelCategory || '').trim();
-          const selectedCategoryStr = String(selectedCategoryName || '').trim();
-          
-          // Check if they match exactly or if one contains the other (handles "3" vs "3 Star")
-          matches = hotelCategoryStr === selectedCategoryStr || 
-                   hotelCategoryStr.includes(selectedCategoryStr) || 
-                   selectedCategoryStr.includes(hotelCategoryStr);
-        }
+        matches = !!selectedCategoryName && sameName(h.hotelCategoryName, selectedCategoryName);
       }
-      
       if (!matches) return false;
     }
 
@@ -546,26 +552,11 @@ const filteredhotels = useMemo(() => {
       if (!matches) return false;
     }
 
-    // Filter 6: Country - match by ID first, then by name
+    // Filter 6: Country - rows carry only the country name, so compare names
     if (country) {
-      let matches = false;
-      
-      // First try to match by ID (most reliable)
-      if (h.countryId && String(h.countryId) === String(country)) {
-        matches = true;
-      } else {
-        // If ID doesn't match or doesn't exist, try matching by name
-        const selectedCountryName = countryOptions.find(opt => String(opt.id) === String(country))?.name;
-        if (selectedCountryName) {
-          // Convert both to strings for comparison (handle type mismatches)
-          const hotelCountryStr = String(h.country || '').trim();
-          const selectedCountryStr = String(selectedCountryName || '').trim();
-          
-          // Check if they match exactly
-          matches = hotelCountryStr === selectedCountryStr;
-        }
-      }
-      
+      const matches =
+        (h.countryId && String(h.countryId) === String(country)) ||
+        (countryName && sameName(h.country, countryName));
       if (!matches) return false;
     }
 
@@ -592,37 +583,23 @@ const filteredhotels = useMemo(() => {
       if (!matches) return false;
     }
 
-    // Filter 8: Place - match by ID first, then by name
+    // Filter 8: Place - rows carry only the place name, so compare names
     if (place) {
-      let matches = false;
-      
-      // First try to match by ID (most reliable)
-      if (h.placeId && String(h.placeId) === String(place)) {
-        matches = true;
-      } else {
-        // If ID doesn't match or doesn't exist, try matching by name
-        const selectedPlaceName = placeOptions.find(opt => String(opt.id) === String(place))?.name;
-        if (selectedPlaceName) {
-          // Convert both to strings for comparison (handle type mismatches)
-          const hotelPlaceStr = String(h.place || '').trim();
-          const selectedPlaceStr = String(selectedPlaceName || '').trim();
-          
-          // Check if they match exactly
-          matches = hotelPlaceStr === selectedPlaceStr;
-        }
-      }
-      
+      const matches =
+        (h.placeId && String(h.placeId) === String(place)) ||
+        (placeName && sameName(h.place, placeName));
       if (!matches) return false;
     }
 
     return true;
   });
-}, [hotels, searchQuery, selectedhotel, selectedhoteltype, category, roomCategory, region, country, state, place, hotelOptions, hotelTypeOptions, hotelCategoryOptions, roomCategoryOptions, regionOptions, countryOptions, stateOptions, placeOptions]);
+}, [hotels, searchQuery, selectedhotel, selectedhoteltype, category, roomCategory, region, country, state, place, countryName, placeName, hotelOptions, hotelTypeOptions, hotelCategoryOptions, roomCategoryOptions, regionOptions, stateOptions]);
 
  const totalPages = useMemo(() => Math.ceil(filteredhotels.length / itemsPerPage), [filteredhotels.length, itemsPerPage]);
  const startIndex = useMemo(() => (currentpage -1) * itemsPerPage, [currentpage, itemsPerPage]);
  const endIndex = useMemo(() => startIndex + itemsPerPage, [startIndex, itemsPerPage]);
  const currentHotels = useMemo(() => filteredhotels.slice(startIndex, endIndex), [filteredhotels, startIndex, endIndex]);
+ const paginationItems = useMemo(() => getPaginationItems(totalPages, currentpage), [totalPages, currentpage]);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -643,7 +620,7 @@ const filteredhotels = useMemo(() => {
               <Row className="align-items-end g-4 mb-4">
 
                 {/* Row 1 — Service / Booking / Cancellation Deadline dates */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Service Date</Form.Label>
                     <div className="d-flex gap-2">
@@ -655,7 +632,7 @@ const filteredhotels = useMemo(() => {
                         onChange={(e) => updateBookingFilter("serviceDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
+                </Col> */}
                 <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Booking Date</Form.Label>
@@ -669,7 +646,7 @@ const filteredhotels = useMemo(() => {
                     </div>
                   </Form.Group>
                 </Col>
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
                     <div className="d-flex gap-2">
@@ -681,7 +658,7 @@ const filteredhotels = useMemo(() => {
                         onChange={(e) => updateBookingFilter("deadlineDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
+                </Col> */}
 
                 {/* Row 2 — Reconfirm / Cancel dates */}
                 <Col md={4}>
@@ -710,27 +687,27 @@ const filteredhotels = useMemo(() => {
                     </div>
                   </Form.Group>
                 </Col>
-                <Col md={4} />
+                {/* <Col md={4} /> */}
 
                 {/* Row 3 — reference / guest text filters */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Booking Reference"
                     value={tempBookingFilters.bookingReference}
                     onChange={(e) => updateBookingFilter("bookingReference", e.target.value)} />
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Supplier Reference No."
                     value={tempBookingFilters.supplierReference}
                     onChange={(e) => updateBookingFilter("supplierReference", e.target.value)} />
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Guest Name"
                     value={tempBookingFilters.guestName}
                     onChange={(e) => updateBookingFilter("guestName", e.target.value)} />
-                </Col>
+                </Col> */}
 
                 {/* Row 4 — status / branch / supplier / service type */}
-                <Col md={3}>
+                {/* <Col md={2}>
                   <Form.Select size="sm"
                     value={tempBookingFilters.status}
                     onChange={(e) => updateBookingFilter("status", e.target.value)}>
@@ -741,8 +718,8 @@ const filteredhotels = useMemo(() => {
                     <option value="SOLD_OUT">Sold Out</option>
                     <option value="CANCELLED">Cancelled</option>
                   </Form.Select>
-                </Col>
-                <Col md={3}>
+                </Col> */}
+                <Col md={4}>
                   <Form.Select size="sm"
                     value={tempBookingFilters.branch}
                     onChange={(e) => updateBookingFilter("branch", e.target.value)}>
@@ -752,13 +729,13 @@ const filteredhotels = useMemo(() => {
                     ))}
                   </Form.Select>
                 </Col>
-                <Col md={3}>
+                {/* <Col md={4}>
                   <Supplier
                     value={tempBookingFilters.supplierId}
                     onChange={(id) => updateBookingFilter("supplierId", String(id))}
                   />
-                </Col>
-                <Col md={3}>
+                </Col> */}
+                <Col md={4}>
                   <Form.Select size="sm"
                     value={tempBookingFilters.bookingType}
                     onChange={(e) => updateBookingFilter("bookingType", e.target.value)}>
@@ -822,7 +799,7 @@ const filteredhotels = useMemo(() => {
                 <Col md={3}>
                   <Country
                   value={tempCountry}
-                  onChange={setTempCountry}/>
+                  onChange={(id, opt) => { setTempCountry(id); setTempCountryName(opt?.name || ""); }}/>
                 </Col>
                 <Col md={3}>
                    <State
@@ -833,13 +810,29 @@ const filteredhotels = useMemo(() => {
 
                   <Place
                   value={tempPlace}
-                  onChange={setTempPlace}
+                  onChange={(id, opt) => { setTempPlace(id); setTempPlaceName(opt?.name || ""); }}
                   />
                 </Col>
               </Row>
 
               <Row className="mt-4">
-                <Col md={12}>
+                <Col md={4}>
+                <div>
+                    <input
+                    type="text"
+                    value={tempSearchQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setTempSearchQuery(value);
+                      setSearchQuery(value); // Update searchQuery immediately for real-time filtering
+                      setCurrentPage(1); // Reset to first page when searching
+                    }}
+                    placeholder="Search here"
+                    className="form-control form-control-sm w-auto"
+                    />
+                  </div>
+                  </Col>
+                <Col md={8}>
                   <div className="d-flex gap-2 justify-content-end">
                     <Button variant="success" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
                       <i className="fas fa-search me-1"></i>Search
@@ -861,7 +854,7 @@ const filteredhotels = useMemo(() => {
                     </Button>
                   </div>
 
-                  <div>
+                  {/* <div>
                     <input
                     type="text"
                     value={tempSearchQuery}
@@ -874,7 +867,7 @@ const filteredhotels = useMemo(() => {
                     placeholder="Search here"
                     className="form-control form-control-sm w-auto"
                     />
-                  </div>
+                  </div> */}
 
                 </Col>
               </Row>
@@ -903,7 +896,7 @@ const filteredhotels = useMemo(() => {
                         <td>{startIndex + index + 1}</td>
                         <td>{h.hotelName}</td>
                         <td>{h.hotelType} </td>
-                        <td>{h.hotelCategory} Star</td>
+                        <td>{hotelCategoryLabel(h)}</td>
                         <td>{h.roomCategory}</td>
                         <td>{h.region}</td>
                         <td>{h.country}</td>
@@ -934,30 +927,19 @@ showing {filteredhotels . length > 0 ? startIndex + 1 : 0} to {Math.min (endInde
                     <Pagination.Prev onClick={()=>setCurrentPage(prev =>Math.max(1,prev-1))}
                       disabled={currentpage === 1}/>
 
-                      {Array.from({length:totalPages},(_,i)=>i+1).map((pageNum)=>{
-                        if(
-                          pageNum ===1||
-                          pageNum ===totalPages||
-                          (pageNum >= currentpage -1&&pageNum<=currentpage+1)
+                      {paginationItems.map((item) =>
+                        typeof item === "string" ? (
+                          <Pagination.Ellipsis key={item} disabled />
+                        ) : (
+                          <Pagination.Item
+                            key={item}
+                            active={item === currentpage}
+                            onClick={() => setCurrentPage(item)}
+                          >
+                            {item}
+                          </Pagination.Item>
                         )
-                        {
-                          return(
-                            <Pagination.Item
-                              key={pageNum}
-                              active={pageNum===currentpage}
-                              onClick={()=>setCurrentPage(pageNum)}>
-                                 {pageNum}
-                                 </Pagination.Item>
-                                 )}
-                                 else if(
-                                  pageNum === currentpage-2||
-                                  pageNum === currentpage +2
-                                )
-                                {
-                                  return <Pagination.Ellipsis key={pageNum}/>
-                                }
-                                return null;
-                      })}
+                      )}
 
             
                     <Pagination.Next onClick={()=>setCurrentPage(prev=> Math.min(totalPages, prev+1))}

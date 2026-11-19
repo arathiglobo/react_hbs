@@ -40,7 +40,7 @@ export default function Country({ value, onChange }) {
                      style={{ cursor: "pointer" }}
                      onMouseEnter={e => e.target.style.backgroundColor = "#f8f9fa"}
                      onMouseLeave={e => e.target.style.backgroundColor = "white"}
-                     onClick={() => { onChange(opt.id); setIsOpen(false); setSearchTerm(""); }}>
+                     onClick={() => { onChange(opt.id, opt); setIsOpen(false); setSearchTerm(""); }}>
                   {opt.name}
                 </div>
               ))}

@@ -12,6 +12,8 @@ import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
+import { getPaginationItems } from "../../utils/paginationItems";
+import { compactFilters, emailSentMessage, emailErrorMessage } from "../../utils/reportEmail";
 
 export default function ContractExpiryReport() {
 
@@ -59,6 +61,8 @@ const initialBookingFilters = {
   bookingType: "",
 };
 const [tempBookingFilters, setTempBookingFilters] = useState(initialBookingFilters);
+// Booking filters of the last Search — what the table shows, and what Mail sends
+const [appliedBookingFilters, setAppliedBookingFilters] = useState(initialBookingFilters);
 
 // Branch dropdown options (distinct booking locations)
 const [branchOptions, setBranchOptions] = useState([]);
@@ -141,15 +145,19 @@ const parseExpirationDate = (value) => {
   return date;
 };
 
-// Function to calculate status based on expiration date
-const getContractStatus = (expirationDate) => {
-  const expiryDate = parseExpirationDate(expirationDate);
-  if (!expiryDate) return "Inactive";
+// Status shown for a contract. The server sends the contract's own Live / Stop
+// switch: "Stop" always wins; a live contract past its expiration date shows
+// as "Expired" (this report is about expiry); otherwise the server's status.
+const getContractStatus = (contract) => {
+  const serverStatus = String(contract?.status || "").trim();
+  if (serverStatus.toLowerCase() === "stop") return "Stop";
 
+  const expiryDate = parseExpirationDate(contract?.expirationDate);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  if (expiryDate && expiryDate < today) return "Expired";
 
-  return expiryDate >= today ? "Live" : "Inactive";
+  return serverStatus || "Live";
 };
 
 
@@ -246,12 +254,14 @@ const handleSearch = async () => {
   setTableSearch("");
   setCurrentPage(1);
   // Booking-level filters are applied server-side
+  setAppliedBookingFilters(tempBookingFilters);
   await fetchContracts(tempBookingFilters);
 };
 
 // Handle reset/clear filters
 const handleReset = async () => {
   setTempBookingFilters(initialBookingFilters);
+  setAppliedBookingFilters(initialBookingFilters);
   setTempFromDate("");
   setTempToDate("");
   setTempSelectedHotel("");
@@ -272,24 +282,28 @@ const handleSendEmail = async () => {
 
   setIsSending(true);
   try {
-    // API call to send email
+    // Booking filters of the last Search, the contract filters and the
+    // "search here" text. Contract rows carry hotel names, so the hotel goes by name.
     const response = await axiosInstance.post('/api/reports/send-email', {
-      email: emailAddress,
+      email: emailAddress.trim(),
       reportType: 'contractexpiry',
-      filters: {
-        fromDate: fromDate,
-        toDate: toDate,
-        hotelId: selectedHotel
-      }
+      filters: compactFilters(appliedBookingFilters, {
+        hotelName: selectedHotel
+          ? hotelOptions.find((opt) => String(opt.id) === String(selectedHotel))?.name
+          : undefined,
+        fromDate,
+        toDate,
+        searchQuery: tableSearch,
+      }),
     });
 
     if (response.data) {
-      toast.success("Report sent successfully!");
+      toast.success(emailSentMessage(response.data));
       setShowMailModal(false);
       setEmailAddress("");
     }
   } catch (error) {
-    toast.error("Failed to send email");
+    toast.error(emailErrorMessage(error));
   } finally {
     setIsSending(false);
   }
@@ -336,7 +350,7 @@ const handleSendEmail = async () => {
                   <td>${escapeHtml(c.rateCode)}</td>
                   <td>${escapeHtml(c.day)}</td>
                   <td>${escapeHtml(c.hotelName)}</td>
-                  <td>${escapeHtml(getContractStatus(c.expirationDate))}</td>
+                  <td>${escapeHtml(getContractStatus(c))}</td>
                   <td>${escapeHtml(c.expirationDate)}</td>
                 </tr>
               `).join('')}
@@ -370,7 +384,7 @@ const handleSendEmail = async () => {
         c.rateCode,
         c.day,
         c.hotelName,
-        getContractStatus(c.expirationDate),
+        getContractStatus(c),
         c.expirationDate
       ]),
       startY: 30,
@@ -401,7 +415,7 @@ const handleSendEmail = async () => {
         c.rateCode,
         c.day,
         c.hotelName,
-        getContractStatus(c.expirationDate),
+        getContractStatus(c),
         c.expirationDate
       ].map(escapeCSV).join(','))
     ].join('\n');
@@ -433,11 +447,11 @@ const handleSendEmail = async () => {
 
             {/* Filters Section */}
             <div className="p-4 bg-light border-bottom">
-              <h6 className="fw-bold text-primary mb-3">Booking Details</h6>
-              <Row className="align-items-end g-4 mb-4">
+              {/* <h6 className="fw-bold text-primary mb-3">Booking Details</h6>
+              <Row className="align-items-end g-4 mb-4"> */}
 
                 {/* Row 1 — Service / Booking / Cancellation Deadline dates */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Service Date</Form.Label>
                     <div className="d-flex gap-2">
@@ -449,8 +463,8 @@ const handleSendEmail = async () => {
                         onChange={(e) => updateBookingFilter("serviceDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Booking Date</Form.Label>
                     <div className="d-flex gap-2">
@@ -462,8 +476,8 @@ const handleSendEmail = async () => {
                         onChange={(e) => updateBookingFilter("bookingDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
                     <div className="d-flex gap-2">
@@ -475,10 +489,10 @@ const handleSendEmail = async () => {
                         onChange={(e) => updateBookingFilter("deadlineDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
+                </Col> */}
 
                 {/* Row 2 — Reconfirm / Cancel dates */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
                     <div className="d-flex gap-2">
@@ -503,34 +517,34 @@ const handleSendEmail = async () => {
                         onChange={(e) => updateBookingFilter("cancelDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
-                <Col md={4} />
+                </Col> */}
+                {/* <Col md={4} /> */}
 
                 {/* Row 3 — reference / guest text filters */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Booking Reference"
                     value={tempBookingFilters.bookingReference}
                     onChange={(e) => updateBookingFilter("bookingReference", e.target.value)} />
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Supplier Reference No."
                     value={tempBookingFilters.supplierReference}
                     onChange={(e) => updateBookingFilter("supplierReference", e.target.value)} />
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Guest Name"
                     value={tempBookingFilters.guestName}
                     onChange={(e) => updateBookingFilter("guestName", e.target.value)} />
-                </Col>
+                </Col> */}
 
                 {/* Row 4 — city / branch / status */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <DestinationCity
                     value={tempBookingFilters.city}
                     onChange={(cityName) => updateBookingFilter("city", cityName)}
                   />
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <Form.Select size="sm"
                     value={tempBookingFilters.branch}
                     onChange={(e) => updateBookingFilter("branch", e.target.value)}>
@@ -551,16 +565,16 @@ const handleSendEmail = async () => {
                     <option value="SOLD_OUT">Sold Out</option>
                     <option value="CANCELLED">Cancelled</option>
                   </Form.Select>
-                </Col>
+                </Col> */}
 
                 {/* Row 5 — supplier / service type */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Supplier
                     value={tempBookingFilters.supplierId}
                     onChange={(id) => updateBookingFilter("supplierId", String(id))}
                   />
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <Form.Select size="sm"
                     value={tempBookingFilters.bookingType}
                     onChange={(e) => updateBookingFilter("bookingType", e.target.value)}>
@@ -570,7 +584,7 @@ const handleSendEmail = async () => {
                   </Form.Select>
                 </Col>
                 <Col md={4} />
-              </Row>
+              </Row> */}
 
               <h6 className="fw-bold text-primary mb-3">Contract Details</h6>
               <Row className="align-items-end g-4">
@@ -596,37 +610,41 @@ const handleSendEmail = async () => {
                     />
                   </Form.Group>
                 </Col>
-                <Col md={2}>
+                <Col md={4}>
                   <HotelFilter
                     value={tempSelectedHotel}
                     onChange={setTempSelectedHotel}
                   />
                 </Col>
-                <Col md={2}>
-                  <Button 
-                    variant="success" 
-                    size="sm" 
-                    className="w-100"
-                    style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}
+              </Row>
+
+              {/* Table search on the left; Search / Reset next to the export buttons */}
+              <Row className="mt-4 align-items-center g-2">
+                <Col md="auto">
+                  <input
+                    type="text"
+                    value={tableSearch}
+                    onChange={(e)=>setTableSearch(e.target.value)}
+                    placeholder="search here"
+                    className="form-control form-control-sm w-auto"
+                  />
+                </Col>
+                <Col className="d-flex flex-wrap gap-2 justify-content-end">
+                  <Button
+                    variant="success"
+                    size="sm"
+                    style={{ backgroundColor: "#676767", borderColor: "#676767", minWidth: 120 }} onClick={handleSearch}
                   >
                     <i className="fas fa-search me-1"></i>Search
                   </Button>
-                </Col>
-                <Col md={2}>
-                  <Button 
-                    variant="outline-secondary" 
-                    size="sm" 
-                    className="w-100"
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    style={{ minWidth: 120 }}
                     onClick={handleReset}
                   >
                     <i className="fas fa-redo me-1"></i>Reset
                   </Button>
-                </Col>
-              </Row>
-
-              {/* Action Buttons */}
-              <Row className="mt-4">
-                <Col md={12} className="d-flex gap-2 justify-content-end">
                   <Button variant="outline-primary" size="sm" onClick={() => setShowMailModal(true)}>
                     <i className="fas fa-envelope me-1"></i>Mail
                   </Button>
@@ -645,7 +663,7 @@ const handleSendEmail = async () => {
 
             {/* Table Section */}
             <Card.Body className="p-0 mt-1">
-              {/* Display and Search Row */}
+              {/* Display Row (the table search box sits with the action buttons above) */}
               <div className="p-2 border-bottom">
                 <Row className="d-flex justify-content-between align-items-center">
                   <Col md="auto">
@@ -666,15 +684,6 @@ const handleSendEmail = async () => {
                       <option value={100}>100</option>
                     </Form.Select>
                     <span className="text-muted ms-2">records</span>
-                  </Col>
-                  <Col md="auto">
-                    <input
-                      type="text"
-                      value={tableSearch}
-                      onChange={(e)=>setTableSearch(e.target.value)}
-                      placeholder="search here"
-                      className="form-control form-control-sm w-auto"
-                    />
                   </Col>
                 </Row>
               </div>
@@ -698,7 +707,7 @@ const handleSendEmail = async () => {
                         <td>{c.rateCode}</td>
                         <td>{c.day}</td>
                         <td>{c.hotelName}</td>
-                        <td>{getContractStatus(c.expirationDate)}</td>
+                        <td>{getContractStatus(c)}</td>
                         <td>{c.expirationDate}</td>
                       </tr>
                     ))
@@ -726,29 +735,19 @@ const handleSendEmail = async () => {
                       disabled={currentPage === 1}
                     />
                     
-                    {Array.from({length: totalPages}, (_, i) => i + 1).map((pageNum) => {
-                      if (
-                        pageNum === 1 ||
-                        pageNum === totalPages ||
-                        (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
-                      ) {
-                        return (
-                          <Pagination.Item
-                            key={pageNum}
-                            active={pageNum === currentPage}
-                            onClick={() => setCurrentPage(pageNum)}
-                          >
-                            {pageNum}
-                          </Pagination.Item>
-                        );
-                      } else if (
-                        pageNum === currentPage - 2 ||
-                        pageNum === currentPage + 2
-                      ) {
-                        return <Pagination.Ellipsis key={pageNum} />;
-                      }
-                      return null;
-                    })}
+                    {getPaginationItems(totalPages, currentPage).map((item) =>
+                      typeof item === "string" ? (
+                        <Pagination.Ellipsis key={item} disabled />
+                      ) : (
+                        <Pagination.Item
+                          key={item}
+                          active={item === currentPage}
+                          onClick={() => setCurrentPage(item)}
+                        >
+                          {item}
+                        </Pagination.Item>
+                      )
+                    )}
 
                     <Pagination.Next 
                       onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}

@@ -21,6 +21,21 @@ import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
+import { getPaginationItems } from "../../utils/paginationItems";
+import { compactFilters, emailSentMessage, emailErrorMessage } from "../../utils/reportEmail";
+
+// From/To date filter pairs shown on the page, with their on-screen labels
+const DATE_RANGES = [
+  ["bookingDateFrom", "bookingDateTo", "Booking Date"],
+  ["reconfirmDateFrom", "reconfirmDateTo", "Reconfirm Date"],
+  ["cancelDateFrom", "cancelDateTo", "Cancel Date"],
+  ["fromDate", "toDate", "Payment Date"],
+];
+
+// Label of the first range whose From date is after its To date, if any.
+// Dates are "yyyy-mm-dd", so string comparison orders them correctly.
+export const findInvertedRange = (filters) =>
+  DATE_RANGES.find(([from, to]) => filters[from] && filters[to] && filters[from] > filters[to])?.[2];
 
 export default function Accounts() {
 
@@ -64,6 +79,8 @@ export default function Accounts() {
     paymentMode: "",
   };
   const [tempFilters, setTempFilters] = useState(initialFilters);
+  // Filters of the last Search — what the table shows, and what Mail sends
+  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
 
   // Payment Mode dropdown options, collected from the unfiltered list
   const [paymentModeOptions, setPaymentModeOptions] = useState([]);
@@ -123,12 +140,20 @@ export default function Accounts() {
   }, []);
 
   const handleSearch = async () => {
+    // An inverted range can never match, so say so instead of showing an empty table
+    const invertedRange = findInvertedRange(tempFilters);
+    if (invertedRange) {
+      toast.error(`${invertedRange}: From Date must be on or before To Date`);
+      return;
+    }
     setCurrentPage(1);
+    setAppliedFilters(tempFilters);
     await fetchAccounts(tempFilters);
   };
 
   const handleReset = async () => {
     setTempFilters(initialFilters);
+    setAppliedFilters(initialFilters);
     setSearchQuery("");
     setCurrentPage(1);
     await fetchAccounts();
@@ -144,24 +169,20 @@ export default function Accounts() {
     setIsSending(true);
     try {
       // API call to send email
+      // Booking + payment filters of the last Search and the "search here" text
       const response = await axiosInstance.post('/api/reports/send-email', {
-        email: emailAddress,
+        email: emailAddress.trim(),
         reportType: 'accounts',
-        filters: {
-          fromDate: String(tempFilters.fromDate || ''),
-          toDate: String(tempFilters.toDate || ''),
-          agentId: String(tempFilters.agentId || ''),
-          paymentMode: String(tempFilters.paymentMode || ''),
-        }
+        filters: compactFilters(appliedFilters, { searchQuery }),
       });
 
       if (response.data) {
-        toast.success("Report sent successfully!");
+        toast.success(emailSentMessage(response.data));
         setShowMailModal(false);
         setEmailAddress("");
       }
     } catch (error) {
-      toast.error("Failed to send email");
+      toast.error(emailErrorMessage(error));
     } finally {
       setIsSending(false);
     }
@@ -274,9 +295,15 @@ export default function Accounts() {
     return accounts.filter(a => {
       if (!searchQuery || !searchQuery.trim()) return true;
       const search = searchQuery.trim().toLowerCase();
+      // Payment date matches as shown in the table (yyyy-mm-dd) or as the
+      // date pickers show it (dd-mm-yyyy, with "-", "/" or "." separators)
+      const dateSearch = search.replace(/[/.]/g, "-");
+      const [y, m, d] = formatDate(a.paymentDate).split("-");
+      const paymentDay = d ? `${y}-${m}-${d}` : "";
+      const paymentDayDmy = d ? `${d}-${m}-${y}` : "";
       return (
         String(a.companyName || '').toLowerCase().includes(search) ||
-        String(a.paymentDate || '').toLowerCase().includes(search) ||
+        (paymentDay && (paymentDay.includes(dateSearch) || paymentDayDmy.includes(dateSearch))) ||
         String(a.creditLimit || '').toLowerCase().includes(search) ||
         String(a.amountPaid || '').toLowerCase().includes(search) ||
         String(a.paymentMode || '').toLowerCase().includes(search) ||
@@ -289,6 +316,7 @@ export default function Accounts() {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex   = startIndex + itemsPerPage;
   const currentBookings = filteredaccounts.slice(startIndex,endIndex);
+  const paginationItems = getPaginationItems(totalPages, currentPage);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -304,11 +332,11 @@ export default function Accounts() {
 
             {/* Filters Section */}
             <div className="p-4 bg-light border-bottom">
-              <h6 className="fw-bold text-primary mb-3">Booking Details</h6>
-              <Row className="align-items-end g-4 mb-4">
+              {/* <h6 className="fw-bold text-primary mb-3">Booking Details</h6>
+              <Row className="align-items-end g-4 mb-4"> */}
 
                 {/* Row 1 — Service / Booking / Cancellation Deadline dates */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Service Date</Form.Label>
                     <div className="d-flex gap-2">
@@ -320,21 +348,23 @@ export default function Accounts() {
                         onChange={(e) => updateFilter("serviceDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Booking Date</Form.Label>
                     <div className="d-flex gap-2">
                       <Form.Control type="date" size="sm" title="From"
                         value={tempFilters.bookingDateFrom}
+                        max={tempFilters.bookingDateTo || undefined}
                         onChange={(e) => updateFilter("bookingDateFrom", e.target.value)} />
                       <Form.Control type="date" size="sm" title="To"
                         value={tempFilters.bookingDateTo}
+                        min={tempFilters.bookingDateFrom || undefined}
                         onChange={(e) => updateFilter("bookingDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
                     <div className="d-flex gap-2">
@@ -346,18 +376,20 @@ export default function Accounts() {
                         onChange={(e) => updateFilter("deadlineDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
+                </Col> */}
 
                 {/* Row 2 — Reconfirm / Cancel dates */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
                     <div className="d-flex gap-2">
                       <Form.Control type="date" size="sm" title="From"
                         value={tempFilters.reconfirmDateFrom}
+                        max={tempFilters.reconfirmDateTo || undefined}
                         onChange={(e) => updateFilter("reconfirmDateFrom", e.target.value)} />
                       <Form.Control type="date" size="sm" title="To"
                         value={tempFilters.reconfirmDateTo}
+                        min={tempFilters.reconfirmDateFrom || undefined}
                         onChange={(e) => updateFilter("reconfirmDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
@@ -368,39 +400,41 @@ export default function Accounts() {
                     <div className="d-flex gap-2">
                       <Form.Control type="date" size="sm" title="From"
                         value={tempFilters.cancelDateFrom}
+                        max={tempFilters.cancelDateTo || undefined}
                         onChange={(e) => updateFilter("cancelDateFrom", e.target.value)} />
                       <Form.Control type="date" size="sm" title="To"
                         value={tempFilters.cancelDateTo}
+                        min={tempFilters.cancelDateFrom || undefined}
                         onChange={(e) => updateFilter("cancelDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
-                <Col md={4} />
+                </Col> */}
+                {/* <Col md={4} /> */}
 
                 {/* Row 3 — reference / guest text filters */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Booking Reference"
                     value={tempFilters.bookingReference}
                     onChange={(e) => updateFilter("bookingReference", e.target.value)} />
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Supplier Reference No."
                     value={tempFilters.supplierReference}
                     onChange={(e) => updateFilter("supplierReference", e.target.value)} />
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Guest Name"
                     value={tempFilters.guestName}
                     onChange={(e) => updateFilter("guestName", e.target.value)} />
-                </Col>
+                </Col> */}
 
                 {/* Row 4 — service / city / branch */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Service Name"
                     value={tempFilters.serviceName}
                     onChange={(e) => updateFilter("serviceName", e.target.value)} />
-                </Col>
-                <Col md={4}>
+                </Col> */}
+                {/* <Col md={4}>
                   <DestinationCity
                     value={tempFilters.city}
                     onChange={(cityName) => updateFilter("city", cityName)}
@@ -415,10 +449,10 @@ export default function Accounts() {
                       <option key={branch} value={branch}>{branch}</option>
                     ))}
                   </Form.Select>
-                </Col>
+                </Col> */}
 
                 {/* Row 5 — status / supplier / service type */}
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Select size="sm"
                     value={tempFilters.status}
                     onChange={(e) => updateFilter("status", e.target.value)}>
@@ -445,7 +479,7 @@ export default function Accounts() {
                     <option value="LAST_MINUTE">Last Minute</option>
                   </Form.Select>
                 </Col>
-              </Row>
+              </Row> */}
 
               <h6 className="fw-bold text-primary mb-3">Payment Details</h6>
               <Row className="align-items-end g-4">
@@ -454,6 +488,7 @@ export default function Accounts() {
                     <Form.Label className="small mb-2">From Date</Form.Label>
                     <Form.Control type="date" size="sm"
                       value={tempFilters.fromDate}
+                      max={tempFilters.toDate || undefined}
                       onChange={(e) => updateFilter("fromDate", e.target.value)} />
                   </Form.Group>
                 </Col>
@@ -462,6 +497,7 @@ export default function Accounts() {
                     <Form.Label className="small mb-2">To Date</Form.Label>
                     <Form.Control type="date" size="sm"
                       value={tempFilters.toDate}
+                      min={tempFilters.fromDate || undefined}
                       onChange={(e) => updateFilter("toDate", e.target.value)} />
                   </Form.Group>
                 </Col>
@@ -484,34 +520,41 @@ export default function Accounts() {
                     </Form.Select>
                   </Form.Group>
                 </Col>
-                <Col md={3}>
-                  <Button variant="success" className="w-100" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
+              </Row>
+
+              {/* Table search on the left; Search / Reset next to the export buttons */}
+              <Row className="mt-4 align-items-center g-2">
+                <Col md={2}>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e)=>setSearchQuery(e.target.value)}
+                    placeholder="search here"
+                    className="form-control form-control-sm"
+                  />
+                </Col>
+                <Col md={10} className="d-flex flex-wrap gap-2 justify-content-end">
+                  <Button variant="success" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767", minWidth: 120 }} onClick={handleSearch}>
                     <i className="fas fa-search me-1"></i>Search
                   </Button>
-                </Col>
-                <Col md={3}>
-                  <Button variant="outline-secondary" className="w-100" size="sm" onClick={handleReset}>
+                  <Button variant="outline-secondary" size="sm" style={{ minWidth: 120 }} onClick={handleReset}>
                     <i className="fas fa-undo me-1"></i>Reset
                   </Button>
-                </Col>
-                <Col md={12} className="mt-4">
-                  <div className="d-flex gap-2 justify-content-end">
-                    <Button variant="outline-primary" size="sm" onClick={() => setShowMailModal(true)}>
-                      <i className="fas fa-envelope me-1"></i>Mail
-                    </Button>
-                    <Button variant="outline-secondary" size="sm" onClick={handlePrint}>
-                      <i className="fas fa-print me-1"></i>Print
-                    </Button>
-                    <Button variant="outline-danger" size="sm" onClick={handlePDF}>
-                      <i className="fas fa-file-pdf me-1"></i>PDF
-                    </Button>
-                    <Button variant="outline-success" size="sm" onClick={handleExcel}>
-                      <i className="fas fa-file-excel me-1"></i>Excel
-                    </Button>
-                  </div>
+                  <Button variant="outline-primary" size="sm" onClick={() => setShowMailModal(true)}>
+                    <i className="fas fa-envelope me-1"></i>Mail
+                  </Button>
+                  <Button variant="outline-secondary" size="sm" onClick={handlePrint}>
+                    <i className="fas fa-print me-1"></i>Print
+                  </Button>
+                  <Button variant="outline-danger" size="sm" onClick={handlePDF}>
+                    <i className="fas fa-file-pdf me-1"></i>PDF
+                  </Button>
+                  <Button variant="outline-success" size="sm" onClick={handleExcel}>
+                    <i className="fas fa-file-excel me-1"></i>Excel
+                  </Button>
                 </Col>
               </Row>
-                <div className="d-flex  p-3">
+                {/* <div className="d-flex  p-3">
               <input
               type="text"
               value={searchQuery}
@@ -519,7 +562,7 @@ export default function Accounts() {
               placeholder="search here"
               className="form-control form-control-sm w-auto "
               />
-            </div>
+            </div> */}
             </div>
 
             <Card.Body className="p-0 mt-1">
@@ -560,7 +603,7 @@ export default function Accounts() {
                 <div>
                   <small className="text-muted">
                     {/* Showing 1 to {accounts.length} of {accounts.length} entries */}
-Showing {filteredaccounts . length > 0 ? startIndex + 1 :0} to {Math.min(endIndex, filteredaccounts.length)} of {filteredaccounts.length}entries
+Showing {filteredaccounts . length > 0 ? startIndex + 1 :0} to {Math.min(endIndex, filteredaccounts.length)} of {filteredaccounts.length} entries
                   </small>
                 </div>
                 <div>
@@ -568,31 +611,19 @@ Showing {filteredaccounts . length > 0 ? startIndex + 1 :0} to {Math.min(endInde
                     <Pagination.Prev onClick={()=>setCurrentPage(prev =>Math.max(1,prev-1))}
                     disabled={currentPage ===1} />
 
-                    {Array.from({length:totalPages},(_,i)=>i+1).map((pageNum)=>{
-                      if(
-                        pageNum === 1||
-                        pageNum ===totalPages||
-                        (pageNum >= currentPage -1&&pageNum<=currentPage+1)
-                      ){
-                        return(
-                          <Pagination.Item
-                          key={pageNum}
-                          active={pageNum===currentPage}
-                          onClick={()=>setCurrentPage(pageNum)}>
-                            {pageNum}
-                          </Pagination.Item>
-                        )}
-                        else if(
-                          pageNum === currentPage-2||
-                          pageNum === currentPage+2
-                        )
-                        {
-                          return<Pagination.Ellipsis key={pageNum}/>
-                        }
-                        return null;
-                    })}
-
-
+                    {paginationItems.map((item) =>
+                      typeof item === "string" ? (
+                        <Pagination.Ellipsis key={item} disabled />
+                      ) : (
+                        <Pagination.Item
+                          key={item}
+                          active={item === currentPage}
+                          onClick={() => setCurrentPage(item)}
+                        >
+                          {item}
+                        </Pagination.Item>
+                      )
+                    )}
 
                     <Pagination.Next onClick={()=>setCurrentPage(prev => Math.min(totalPages,prev+1))}
                       disabled={currentPage === totalPages||totalPages === 0}/>
