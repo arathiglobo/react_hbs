@@ -18,6 +18,7 @@ import "../../styles/HotelSearch.css";
 // is visually distinct from a closed one.
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const pad = (n) => String(n).padStart(2, "0");
+
 const formatAudit = (iso) => {
   if (!iso) return "0000:00:00";
   const d = new Date(iso);
