@@ -356,6 +356,7 @@ const API_TYPE_TO_API_ID = {
   ATHARVA: 3,
   GRN: 20,
   GOGLOBAL: 21,
+  ATHARVA_V2: 22,
 };
 
 /**
@@ -387,6 +388,7 @@ export const CHANNEL_OPTIONS = [
   { value: "darina", label: "Darina" },
   { value: "grn", label: "GRN" },
   { value: "goglobal", label: "GoGlobal" },
+  { value: "atharva_v2", label: "Atharva-V2" },
 ];
 
 /**

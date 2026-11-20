@@ -7,6 +7,10 @@ import Topbar from "../../components/TopBar";
 import AsyncSelect from "react-select/async";
 import BackButton from "../../components/BackButton";
 
+// ATHARVA_V2 is shown as ATHARVA_V2_API; the backend accepts the lower-cased
+// label ("atharva_v2_api") as its platform. Its hotels are listed per city.
+const ATHARVA_V2_PLATFORM = "ATHARVA_V2_API";
+
 const FetchNewHotels = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -24,6 +28,7 @@ const FetchNewHotels = () => {
     "X3",
     "Ratehawk",
     "Atharva",
+    ATHARVA_V2_PLATFORM,
   ]);
 
   const [formData, setFormData] = useState({
@@ -39,6 +44,7 @@ const FetchNewHotels = () => {
     X3: { countries: "api/iwtx/countrylist" },
     Ratehawk: { countries: "/api/ratehawk/countrylist" },
     Atharva: { countries: "/api/atharva/countrylist" },
+    [ATHARVA_V2_PLATFORM]: { countries: "/api/atharva-v2/countrylist" },
   };
 
   const platformCityApis = {
@@ -48,7 +54,13 @@ const FetchNewHotels = () => {
     X3: { cities: "api/iwtx/citylist" },
     Ratehawk: { cities: "/api/ratehawk/citylist" },
     Atharva: { cities: "/api/atharva/citylist" },
+    [ATHARVA_V2_PLATFORM]: { cities: "/api/atharva-v2/citylist" },
   };
+
+  const isAtharvaV2 = formData.apiProvider === ATHARVA_V2_PLATFORM;
+  // ATHARVA_V2 filters and saves by city, so it is sent as cityId.
+  const atharvaV2CityParam =
+    isAtharvaV2 && formData.apiCityName ? { cityId: formData.apiCityName } : {};
 
   const handlePlatformChange = (e) => {
     const value = e.target.value;
@@ -144,6 +156,7 @@ const FetchNewHotels = () => {
       ...prev,
       apiCityName: option ? option.value : "",
     }));
+    setErrors((prev) => ({ ...prev, apiCityName: "" }));
   };
 
   const handleFetchFromDB = async () => {
@@ -158,6 +171,7 @@ const FetchNewHotels = () => {
             countryId: formData.apiCountryId,
             city: formData.apiCityName,
             platform: formData.apiProvider.toLowerCase(),
+            ...atharvaV2CityParam,
           },
         },
       );
@@ -176,6 +190,10 @@ const FetchNewHotels = () => {
 
   const handleFetchFromApis = async () => {
     if (!validateForm()) return;
+    if (isAtharvaV2 && !formData.apiCityName) {
+      setErrors((prev) => ({ ...prev, apiCityName: "City is required for ATHARVA_V2_API" }));
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -221,6 +239,7 @@ const FetchNewHotels = () => {
           countryId: formData.apiCountryId,
           pageNumber: apiMeta.pageNumber,
           pageSize: apiMeta.pageSize,
+          ...atharvaV2CityParam,
         },
       });
       toast.success(`${hotelList.length} hotels saved to DB successfully!`);

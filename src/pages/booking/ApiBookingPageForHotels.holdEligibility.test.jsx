@@ -40,6 +40,7 @@ const SUPPLIERS = [
   ["GoGlobal", 21],
   ["X3", 15],
   ["Darina", 16],
+  ["ATHARVA_V2_API", 22],
 ];
 
 describe("Hold Room and Pay Later on the supplier booking page", () => {

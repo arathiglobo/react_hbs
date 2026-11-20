@@ -27,9 +27,14 @@ const PLATFORMS = [
   "Ratehawk",
   "Atharva",
   "Grn",
+  "ATHARVA_V2",
 ];
 
-const PLATFORM_OPTIONS = PLATFORMS.map((p) => ({ value: p, label: p }));
+// The value, lower-cased, is the api_city_mapping provider ("atharva_v2");
+// ATHARVA_V2 is shown as ATHARVA_V2_API.
+const platformLabel = (p) => (p === "ATHARVA_V2" ? "ATHARVA_V2_API" : p);
+
+const PLATFORM_OPTIONS = PLATFORMS.map((p) => ({ value: p, label: platformLabel(p) }));
 
 const PAGE_SIZE = 10;
 
@@ -246,7 +251,7 @@ const MappedList = () => {
                       options={PLATFORM_OPTIONS}
                       value={
                         selectedPlatform
-                          ? { value: selectedPlatform, label: selectedPlatform }
+                          ? { value: selectedPlatform, label: platformLabel(selectedPlatform) }
                           : null
                       }
                       onChange={(opt) =>
@@ -304,7 +309,7 @@ const MappedList = () => {
                         <th>City Name</th>
                         <th style={{ width: 220 }}>
                           {resultPlatform
-                            ? `${resultPlatform} Mapping`
+                            ? `${platformLabel(resultPlatform)} Mapping`
                             : "Mapping"}
                         </th>
                       </tr>

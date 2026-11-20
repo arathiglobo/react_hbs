@@ -231,7 +231,7 @@ const OfflineCab = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit 
         <Row className="g-3">
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Supplier</Form.Label>
+              <Form.Label className="form-label-modern">Supplier <span className="text-danger">*</span></Form.Label>
               <Select
                 className={`react-select-premium ${errors.supplier ? "is-invalid-select" : ""}`}
                 classNamePrefix="react-select"
@@ -249,7 +249,7 @@ const OfflineCab = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit 
 
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Transfer</Form.Label>
+              <Form.Label className="form-label-modern">Transfer <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="text"
                 className={inputCls("arrivalTransfer")}
@@ -264,7 +264,7 @@ const OfflineCab = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit 
 
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Qty</Form.Label>
+              <Form.Label className="form-label-modern">Qty <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="number"
                 min="1"
@@ -322,7 +322,7 @@ const OfflineCab = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit 
 
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Rate (in AED)</Form.Label>
+              <Form.Label className="form-label-modern">Rate (in AED) <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="number"
                 min="0"
@@ -369,7 +369,7 @@ const OfflineCab = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit 
 
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Date</Form.Label>
+              <Form.Label className="form-label-modern">Date <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="date"
                 className={inputCls("date")}

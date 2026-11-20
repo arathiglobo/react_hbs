@@ -6,6 +6,8 @@ export const ACM_API = "/api/city-mapping/auto";
 
 export const PROVIDER_LABEL = {
   atharva: "Atharva",
+  // ATHARVA_V2 is shown as ATHARVA_V2_API, like everywhere else in the app.
+  atharva_v2: "ATHARVA_V2_API",
   grn: "GRN",
   goglobal: "GoGlobal",
   iwtx: "IWTX",

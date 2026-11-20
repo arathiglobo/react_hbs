@@ -91,6 +91,9 @@ const ROOM_LIST_API_IDS = {
   // Room list backend routes 21 to GoGlobalHotelRoomSearchService. Without it
   // the payload fell back to 0 and /api/hotel-rooms/search refused it.
   goglobal: 21,
+  // Room list backend routes 22 to AtharvaV2HotelRoomSearchService (separate
+  // from atharva / 3).
+  atharva_v2: 22,
 };
 
 /** The number that opens this card's room list, or 0 when there is none. */

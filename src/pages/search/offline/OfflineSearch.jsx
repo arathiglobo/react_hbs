@@ -19,6 +19,8 @@ import OfflineActivity from "./OfflineActivity";
 import OfflineCab from "./OfflineCab";
 import OfflineVisa from "./OfflineVisa";
 import OfflineMiscellaneous from "./OfflineMiscellaneous";
+import { uaeNowInputValue } from "../../../utils/dateUtils";
+import useOperatorLocation from "../../../hooks/useOperatorLocation";
 
 // ─────────────────────────────────────────────
 // Guest Selector Components
@@ -53,12 +55,46 @@ function GuestCounter({ label, sub, value, min, max, onChange }) {
   );
 }
 
+// Same as the hotel search page: children are Age 0–17 (adults 18+), the age
+// dropdown runs 0–17 and a new child starts at 5.
+const CHILD_MAX_AGE = 17;
+const DEFAULT_CHILD_AGE = 5;
+
 function RoomGuestSelector({ value, onChange }) {
-  const addRoom = () => onChange([...value, { adults: 1, children: 0, childAges: [] }]);
+  const addRoom = () => onChange([...value, { adults: 1, children: 0, childAges: [], childNames: [] }]);
   const removeRoom = (i) => onChange(value.filter((_, idx) => idx !== i));
   const updateRoom = (i, field, val) => {
     const next = [...value];
     next[i] = { ...next[i], [field]: val };
+    onChange(next);
+  };
+  // Children count changed: one age and one (optional) name per child,
+  // keeping what was already entered (`??`, so a chosen age 0 stays 0) —
+  // ages as on the hotel search page.
+  const setChildren = (i, children) => {
+    const next = [...value];
+    const ages = next[i].childAges || [];
+    const names = next[i].childNames || [];
+    next[i] = {
+      ...next[i],
+      children,
+      childAges: Array.from({ length: children }, (_, j) => ages[j] ?? DEFAULT_CHILD_AGE),
+      childNames: Array.from({ length: children }, (_, j) => names[j] ?? ""),
+    };
+    onChange(next);
+  };
+  const setChildAge = (i, childIdx, age) => {
+    const next = [...value];
+    const ages = [...(next[i].childAges || [])];
+    ages[childIdx] = age;
+    next[i] = { ...next[i], childAges: ages };
+    onChange(next);
+  };
+  const setChildName = (i, childIdx, name) => {
+    const next = [...value];
+    const names = [...(next[i].childNames || [])];
+    names[childIdx] = name;
+    next[i] = { ...next[i], childNames: names };
     onChange(next);
   };
 
@@ -76,7 +112,7 @@ function RoomGuestSelector({ value, onChange }) {
           </div>
           <GuestCounter
             label="Adults"
-            sub="Age 12+"
+            sub="Age 18+"
             value={room.adults}
             min={1}
             max={10}
@@ -84,12 +120,51 @@ function RoomGuestSelector({ value, onChange }) {
           />
           <GuestCounter
             label="Children"
-            sub="Age 0-11"
+            sub="Age 0–17"
             value={room.children}
             min={0}
             max={6}
-            onChange={(v) => updateRoom(i, "children", v)}
+            onChange={(v) => setChildren(i, v)}
           />
+          {/* One block per child: name (optional) beside the age, like the
+              hotel search page's age picker with the name in front of it. */}
+          {room.children > 0 && (
+            <div className="rgs-child-ages">
+              <span className="rgs-child-ages-label">Children — name &amp; age</span>
+              <div className="rgs-child-ages-row">
+                {Array.from({ length: room.children }).map((_, idx) => (
+                  <div key={idx} className="rgs-child-age-select">
+                    <label className="rgs-child-age-label">Child {idx + 1}</label>
+                    <div className="offline-child-row">
+                      <Form.Control
+                        size="sm"
+                        type="text"
+                        maxLength={100}
+                        value={room.childNames?.[idx] ?? ""}
+                        onChange={(e) => setChildName(i, idx, e.target.value)}
+                        placeholder="Name (optional)"
+                        className="offline-child-name"
+                        aria-label={`Room ${i + 1}, child ${idx + 1} name`}
+                      />
+                      <Form.Select
+                        size="sm"
+                        value={room.childAges?.[idx] ?? DEFAULT_CHILD_AGE}
+                        onChange={(e) => setChildAge(i, idx, parseInt(e.target.value, 10))}
+                        className="rgs-age-dropdown"
+                        aria-label={`Room ${i + 1}, child ${idx + 1} age`}
+                      >
+                        {Array.from({ length: CHILD_MAX_AGE + 1 }).map((__, age) => (
+                          <option key={age} value={age}>
+                            {age} {age === 1 ? "yr" : "yrs"}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ))}
       <Button variant="outline-primary" size="sm" onClick={addRoom}>+ Add Another Room</Button>
@@ -119,6 +194,44 @@ const tabForEntry = (entry) =>
   SUPPLIER_TABS.find(
     (tab) => tab.toLowerCase() === String(entry?.supplierType || "").toLowerCase()
   ) || null;
+
+// Money in the line table and the totals box. Line amounts come from the
+// server with 2 decimals; they are added up as whole cents so the totals are
+// exact (adding the decimals directly can drift: 0.1 + 0.2 = 0.30000000000000004).
+const toCents = (value) => {
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? Math.round(n * 100) : 0;
+};
+const centsToText = (cents) => (cents / 100).toFixed(2);
+// "132865.2" → "132865.20"; blank stays blank.
+const formatMoney = (value) =>
+  Number.isFinite(parseFloat(value)) ? centsToText(toCents(value)) : "";
+
+// The working behind a line's Sub Total, shown under it — the server's
+// formula (OfflineLineAmounts): selling price × quantity, and × nights for a
+// hotel (a stay with no nights counts as 1). Blank when a figure is missing.
+const subTotalWorking = (entry) => {
+  // An activity with its own child price (Travellers picker):
+  // "300.00 × 2 adults + 150.00 × 1 child".
+  const kids = parseInt(entry.activityChildren, 10) || 0;
+  if (tabForEntry(entry) === "Activity" && kids > 0 && formatMoney(entry.childSellingPrice)) {
+    const adults = parseInt(entry.activityAdults, 10) || 0;
+    const parts = [];
+    if (adults > 0 && formatMoney(entry.adultSellingPrice)) {
+      parts.push(`${formatMoney(entry.adultSellingPrice)} × ${adults} adult${adults === 1 ? "" : "s"}`);
+    }
+    parts.push(`${formatMoney(entry.childSellingPrice)} × ${kids} child${kids === 1 ? "" : "ren"}`);
+    return parts.join(" + ");
+  }
+  const price = formatMoney(entry.sellingPrice);
+  const qty = parseFloat(entry.quantity);
+  if (!price || !Number.isFinite(qty)) return "";
+  if (tabForEntry(entry) === "Hotel") {
+    const nights = Math.max(1, parseInt(entry.noOfNights, 10) || 1);
+    return `${price} × ${qty} room${qty === 1 ? "" : "s"} × ${nights} night${nights === 1 ? "" : "s"}`;
+  }
+  return `${price} × ${qty}`;
+};
 
 const OfflineSearch = () => {
   // Agent logins book under themselves — the backend forces the booking to
@@ -153,10 +266,16 @@ const OfflineSearch = () => {
   const [isLoadingCurrencies, setIsLoadingCurrencies] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [commonOrderNote, setCommonOrderNote] = useState("");
+  // Submit makes the booking On Request; staff must confirm it before this
+  // deadline (UAE time) or it is cancelled automatically.
+  const [cancellationDeadline, setCancellationDeadline] = useState("");
+  const [deadlineError, setDeadlineError] = useState("");
   const navigate = useNavigate();
+  // Booking History "Location" of the Submit, as hotel bookings record it.
+  const operatorLocation = useOperatorLocation();
 
   // Guest state
-  const [rooms, setRooms] = useState([{ adults: 1, children: 0, childAges: [] }]);
+  const [rooms, setRooms] = useState([{ adults: 1, children: 0, childAges: [], childNames: [] }]);
   const [roomsOpen, setRoomsOpen] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -268,7 +387,7 @@ const OfflineSearch = () => {
     const newErrors = {};
     if (!isAgentRole && !formData.agentId) newErrors.agentId = "Agent is required";
     if (!formData.refNo.trim()) newErrors.refNo = "REF No is required";
-    if (!formData.customerName.trim()) newErrors.customerName = "Customer Name is required";
+    if (!formData.customerName.trim()) newErrors.customerName = "Passenger Name is required";
     if (!formData.contactNo.trim()) newErrors.contactNo = "Contact No is required";
     if (!formData.bookingDoneBy) newErrors.bookingDoneBy = "Booking Done By is required";
     if (!formData.currency) newErrors.currency = "Currency is required";
@@ -306,7 +425,23 @@ const OfflineSearch = () => {
       customerName: formData.customerName,
       trn: "",
       refNo: formData.refNo,
-      childAge: ["0"],
+      // Every child's age, room by room ([] when there are no children).
+      // This used to send a "0" placeholder whatever the guests were.
+      childAge: rooms.flatMap((r) =>
+        Array.from({ length: r.children }, (_, j) => r.childAges?.[j] ?? DEFAULT_CHILD_AGE)
+      ),
+      // Each child's name, in the same order as childAge ("" when not typed).
+      childNames: rooms.flatMap((r) =>
+        Array.from({ length: r.children }, (_, j) => String(r.childNames?.[j] ?? "").trim())
+      ),
+      // The rooms as set here, so the Booking Details page can show the
+      // room count and each room's guests (only the totals were saved before).
+      rooms: rooms.map((r) => ({
+        adults: r.adults,
+        children: r.children,
+        childAges: Array.from({ length: r.children }, (_, j) => r.childAges?.[j] ?? DEFAULT_CHILD_AGE),
+        childNames: Array.from({ length: r.children }, (_, j) => String(r.childNames?.[j] ?? "").trim()),
+      })),
       adult: String(rooms.reduce((acc, r) => acc + r.adults, 0)),
       child: String(rooms.reduce((acc, r) => acc + r.children, 0)),
       invoiceNumber: formData.invoiceNo,
@@ -427,6 +562,11 @@ const OfflineSearch = () => {
     }
   };
 
+  // Totals box + final submit: quantity and the exact sum of the line sub
+  // totals (grand total = sub total; there is nothing on top of the lines).
+  const totalQuantity = supplierEntries.reduce((sum, entry) => sum + (parseFloat(entry.quantity) || 0), 0);
+  const subTotalText = centsToText(supplierEntries.reduce((sum, entry) => sum + toCents(entry.subTotal), 0));
+
   const handleFinalSubmit = async () => {
     if (!mainBasicId) {
       toast.error("Please add basic details first");
@@ -436,29 +576,40 @@ const OfflineSearch = () => {
       toast.error("Please add at least one supplier entry");
       return;
     }
+    // Same-format strings ("yyyy-MM-ddTHH:mm") compare in time order.
+    if (!cancellationDeadline) {
+      setDeadlineError("Cancellation deadline is required");
+      return;
+    }
+    if (cancellationDeadline <= uaeNowInputValue()) {
+      setDeadlineError("Cancellation deadline must be later than the current UAE time");
+      return;
+    }
 
     try {
       setIsSubmitting(true);
-      
-      const totalQty = supplierEntries.reduce((sum, entry) => sum + (parseFloat(entry.quantity) || 0), 0);
-      const subTot = supplierEntries.reduce((sum, entry) => sum + (parseFloat(entry.subTotal) || 0), 0);
 
       const payload = {
-        totalQuantity: String(totalQty),
-        subTotal: String(subTot),
-        grandTotal: String(subTot), // Assuming grandTotal is same as subTotal for now
+        totalQuantity: String(totalQuantity),
+        subTotal: subTotalText,
+        grandTotal: subTotalText, // Assuming grandTotal is same as subTotal for now
         commonOrderNote: commonOrderNote,
-        invoiceNumber: savedInvoiceNo
+        invoiceNumber: savedInvoiceNo,
+        cancellationDeadline,
+        // Booking History: where it was submitted from (the server adds the IP).
+        bookingLocation: operatorLocation,
       };
 
       const response = await axiosInstance.post(`/api/v1/offline-booking/final-submit`, payload);
       if (response.status === 200) {
-        toast.success("Booking submitted successfully");
+        toast.success("Booking submitted — it is On Request until it is confirmed");
         navigate("/booking-details/offline-booking-list");
       }
     } catch (error) {
       console.error("Error final submitting:", error);
-      toast.error("Failed to submit booking");
+      const message = error.response?.data?.message;
+      if (message && /deadline/i.test(message)) setDeadlineError(message);
+      toast.error(message || "Failed to submit booking");
     } finally {
       setIsSubmitting(false);
     }
@@ -637,17 +788,17 @@ const OfflineSearch = () => {
                     </Form.Group>
                   </Col>
 
-                  {/* Customer Name */}
+                  {/* Passenger Name (lead guest) */}
                   <Col lg={3} md={6}>
                     <Form.Group>
-                      <Form.Label className="form-label-modern">Customer Name <span className="text-danger">*</span></Form.Label>
+                      <Form.Label className="form-label-modern">Passenger Name <span className="text-danger">*</span></Form.Label>
                       <Form.Control
                         type="text"
                         className={`form-control-premium ${errors.customerName ? "is-invalid" : ""}`}
                         name="customerName"
                         value={formData.customerName}
                         onChange={handleInputChange}
-                        placeholder="Customer Name"
+                        placeholder="Passenger Name"
                       />
                       {errors.customerName && <div className="text-danger small mt-1">{errors.customerName}</div>}
                     </Form.Group>
@@ -806,9 +957,9 @@ const OfflineSearch = () => {
                             <th>Description</th>
                             <th>Qty</th>
                             <th>Unit Price</th>
-                            <th>Selling Price</th>
                             <th>Tax (%)</th>
                             <th>Tax Amount</th>
+                            <th>Selling Price</th>
                             <th>Sub Total</th>
                             <th>Action</th>
                           </tr>
@@ -824,11 +975,18 @@ const OfflineSearch = () => {
                                 <td>{entry.supplierType}</td>
                                 <td>{entry.description}</td>
                                 <td>{entry.quantity}</td>
-                                <td>{entry.unitPrice}</td>
-                                <td>{entry.sellingPrice}</td>
+                                <td>{formatMoney(entry.unitPrice)}</td>
                                 <td>{entry.tax}%</td>
-                                <td>{entry.taxAmount}</td>
-                                <td>{entry.subTotal}</td>
+                                <td>{formatMoney(entry.taxAmount)}</td>
+                                <td>{formatMoney(entry.sellingPrice)}</td>
+                                <td>
+                                  {/* The line's final Sub Total, in red. */}
+                                  <span className="text-danger">{formatMoney(entry.subTotal)}</span>
+                                  {/* How the Sub Total is worked out (see subTotalWorking). */}
+                                  {subTotalWorking(entry) && (
+                                    <div className="small text-muted">{subTotalWorking(entry)}</div>
+                                  )}
+                                </td>
                                 <td className="text-nowrap">
                                   {/* Edit: every supplier type (see canEditEntry). */}
                                   {canEditEntry(entry) ? (
@@ -887,6 +1045,31 @@ const OfflineSearch = () => {
                             style={{ borderRadius: "8px", border: "1px solid #ced4da" }}
                           />
                         </Form.Group>
+                        {/* The booking is On Request after Submit; staff must
+                            confirm it before this time or it is cancelled. */}
+                        <Form.Group className="mt-3" style={{ maxWidth: "320px" }}>
+                          <Form.Label className="fw-bold text-secondary">
+                            Cancellation Deadline (UAE time) <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            type="datetime-local"
+                            className={deadlineError ? "is-invalid" : ""}
+                            value={cancellationDeadline}
+                            min={uaeNowInputValue()}
+                            onChange={(e) => {
+                              setCancellationDeadline(e.target.value);
+                              if (deadlineError) setDeadlineError("");
+                            }}
+                          />
+                          {deadlineError ? (
+                            <div className="text-danger small mt-1">{deadlineError}</div>
+                          ) : (
+                            <div className="text-muted small mt-1">
+                              The booking stays On Request until it is confirmed; if it is not confirmed
+                              by this time, it is cancelled automatically.
+                            </div>
+                          )}
+                        </Form.Group>
                       </Col>
                       <Col md={4}>
                         <div className="d-flex flex-column gap-3">
@@ -895,7 +1078,7 @@ const OfflineSearch = () => {
                             <Form.Control
                               type="text"
                               readOnly
-                              value={supplierEntries.reduce((sum, entry) => sum + (parseFloat(entry.quantity) || 0), 0)}
+                              value={totalQuantity}
                               className="bg-light text-center fw-bold"
                               style={{ height: "45px", borderRadius: "8px" }}
                             />
@@ -905,7 +1088,7 @@ const OfflineSearch = () => {
                             <Form.Control
                               type="text"
                               readOnly
-                              value={supplierEntries.reduce((sum, entry) => sum + (parseFloat(entry.subTotal) || 0), 0).toFixed(2)}
+                              value={subTotalText}
                               className="bg-light text-center fw-bold"
                               style={{ height: "45px", borderRadius: "8px" }}
                             />
@@ -915,7 +1098,7 @@ const OfflineSearch = () => {
                             <Form.Control
                               type="text"
                               readOnly
-                              value={supplierEntries.reduce((sum, entry) => sum + (parseFloat(entry.subTotal) || 0), 0).toFixed(2)}
+                              value={subTotalText}
                               className="bg-light text-center fw-bold"
                               style={{ height: "45px", borderRadius: "8px", border: "1px solid #dee2e6" }}
                             />

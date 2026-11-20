@@ -799,7 +799,7 @@ const SupplierReg = () => {
                     <Row>
                       <Col md={4}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Supplier Name</Form.Label>
+                          <Form.Label>Supplier Name <span className="text-danger">*</span></Form.Label>
                           <Form.Control
                             value={formData.name}
                             placeholder="Enter supplier name"
@@ -835,7 +835,7 @@ const SupplierReg = () => {
                       </Col>
                       <Col md={4}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Email</Form.Label>
+                          <Form.Label>Email <span className="text-danger">*</span></Form.Label>
                           <Form.Control
                             value={formData.email}
                             placeholder="Enter email"
@@ -873,7 +873,7 @@ const SupplierReg = () => {
                       </Col>
                        <Col md={4}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Phone Number</Form.Label>
+                          <Form.Label>Phone Number <span className="text-danger">*</span></Form.Label>
                           <Form.Control
                             value={formData.phoneNumber}
                             placeholder="Enter phone number"
@@ -952,7 +952,7 @@ const SupplierReg = () => {
                       </Col>
                        <Col md={4}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Address</Form.Label>
+                          <Form.Label>Address <span className="text-danger">*</span></Form.Label>
                           <Form.Control
                             value={formData.address}
                             placeholder="Enter address"

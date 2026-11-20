@@ -159,7 +159,7 @@ const OfflineVisa = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit
         <Row className="g-3">
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Supplier</Form.Label>
+              <Form.Label className="form-label-modern">Supplier <span className="text-danger">*</span></Form.Label>
               <Select
                 className={`react-select-premium ${errors.supplier ? "is-invalid-select" : ""}`}
                 classNamePrefix="react-select"
@@ -177,7 +177,7 @@ const OfflineVisa = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit
 
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Visa</Form.Label>
+              <Form.Label className="form-label-modern">Visa <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="text"
                 className={inputCls("visa")}
@@ -192,7 +192,7 @@ const OfflineVisa = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit
 
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Quantity</Form.Label>
+              <Form.Label className="form-label-modern">Quantity <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="number"
                 min="1"
@@ -208,7 +208,7 @@ const OfflineVisa = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit
 
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Price (in AED)</Form.Label>
+              <Form.Label className="form-label-modern">Price (in AED) <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="number"
                 min="0"

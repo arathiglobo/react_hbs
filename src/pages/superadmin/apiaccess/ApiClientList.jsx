@@ -8,6 +8,7 @@ import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaKey, FaCheck, FaTimes, FaCopy, FaListUl, FaTrash } from "react-icons/fa";
+import { apiDisplayName } from "../../../utils/apiDisplayName";
 
 const BASE = "/api/super-admin/api-access/clients";
 const COMPANIES_URL = "/api/companyProfile";
@@ -104,7 +105,7 @@ export default function ApiClientList() {
       setSuppliers(rows.map((r) => ({
         id: r.externalApiId,
         code: r.apiCode,
-        name: r.apiName,
+        name: apiDisplayName(r.apiCode, r.apiName),
       })));
     } catch {
       setSuppliers([]);

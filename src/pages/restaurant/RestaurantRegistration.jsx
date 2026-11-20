@@ -71,6 +71,55 @@ const MEAL_CATEGORIES = [
   "Special",
 ];
 
+/**
+ * react-select styles that make the Country / Place-City dropdowns look like
+ * the neighbouring <Form.Control> inputs on this page (same 52px height,
+ * light-grey fill, rounded border, 0.875rem text and Bootstrap placeholder
+ * colour). react-select renders its own markup, so the global .form-control
+ * rules never reach it — without this the two dropdowns sit shorter, white,
+ * with a larger placeholder, and their error text lines up higher than the
+ * Restaurant Name error beside them.
+ */
+const formLikeSelectStyles = (hasError) => ({
+  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+  control: (base, state) => ({
+    ...base,
+    minHeight: 52,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: hasError
+      ? "#dc3545"
+      : state.isFocused
+      ? "#F75E00"
+      : "#e2e8f0",
+    backgroundColor: state.isDisabled
+      ? "var(--bs-secondary-bg, #e9ecef)"
+      : state.isFocused
+      ? "#fff"
+      : "#f8fafc",
+    boxShadow: hasError
+      ? "0 0 0 0.25rem rgba(220, 53, 69, 0.25)"
+      : state.isFocused
+      ? "0 0 0 3px rgba(247, 94, 0, 0.1)"
+      : "none",
+    fontSize: "0.875rem",
+    fontWeight: 350,
+    "&:hover": {
+      borderColor: hasError ? "#dc3545" : state.isFocused ? "#F75E00" : "#cbd5e1",
+    },
+  }),
+  valueContainer: (base) => ({ ...base, padding: "2px 14px" }),
+  placeholder: (base) => ({
+    ...base,
+    color: "var(--bs-secondary-color, #6c757d)",
+    margin: 0,
+  }),
+  singleValue: (base) => ({ ...base, color: "#1e293b", margin: 0 }),
+  input: (base) => ({ ...base, margin: 0, padding: 0 }),
+  indicatorSeparator: () => ({ display: "none" }),
+  menu: (base) => ({ ...base, fontSize: "0.875rem" }),
+});
+
 const initialState = {
   // Basic details
   restaurantName: "",
@@ -592,6 +641,9 @@ const RestaurantRegistration = () => {
     const newPreviews = files.map((f) => URL.createObjectURL(f));
     setImages((prev) => [...prev, ...files]);
     setImagePreviews((prev) => [...prev, ...newPreviews]);
+    // Clear the "upload at least 1 image" error (and its red box) as soon
+    // as an image is picked, the same way text fields clear on typing.
+    if (errors.images) setErrors((prev) => ({ ...prev, images: "" }));
   };
 
   const removeImage = (idx) => {
@@ -1028,7 +1080,7 @@ const RestaurantRegistration = () => {
               <Card.Body>
                 <Row className="g-3">
                   <Col md={4}>
-                    <Form.Label>Restaurant Name *</Form.Label>
+                    <Form.Label>Restaurant Name <span className="text-danger">*</span></Form.Label>
                     <Form.Control
                       name="restaurantName"
                       value={formData.restaurantName}
@@ -1044,7 +1096,7 @@ const RestaurantRegistration = () => {
                       countryId/countryName so the restaurant search's country
                       filter can match this restaurant. */}
                   <Col md={4}>
-                    <Form.Label>Country *</Form.Label>
+                    <Form.Label>Country <span className="text-danger">*</span></Form.Label>
                     <Select
                       placeholder={countriesLoading ? "Loading countries..." : "Select Country"}
                       isClearable
@@ -1087,13 +1139,7 @@ const RestaurantRegistration = () => {
                         loadPlacesByCountry(nextId);
                       }}
                       menuPortalTarget={document.body}
-                      styles={{
-                        menuPortal: (b) => ({ ...b, zIndex: 9999 }),
-                        control: (b) => ({
-                          ...b,
-                          borderColor: errors.country ? "#dc3545" : b.borderColor,
-                        }),
-                      }}
+                      styles={formLikeSelectStyles(!!errors.country)}
                     />
                     {errors.country && (
                       <div className="invalid-feedback d-block">{errors.country}</div>
@@ -1107,7 +1153,7 @@ const RestaurantRegistration = () => {
                       correct master table. The same label is mirrored into the
                       legacy `place` text column. */}
                   <Col md={4}>
-                    <Form.Label>Place / City *</Form.Label>
+                    <Form.Label>Place / City <span className="text-danger">*</span></Form.Label>
                     <Select
                       placeholder={
                         !formData.countryId
@@ -1162,13 +1208,7 @@ const RestaurantRegistration = () => {
                           setErrors((prev) => ({ ...prev, place: "" }));
                       }}
                       menuPortalTarget={document.body}
-                      styles={{
-                        menuPortal: (b) => ({ ...b, zIndex: 9999 }),
-                        control: (b) => ({
-                          ...b,
-                          borderColor: errors.place ? "#dc3545" : b.borderColor,
-                        }),
-                      }}
+                      styles={formLikeSelectStyles(!!errors.place)}
                     />
                     {errors.place && (
                       <div className="invalid-feedback d-block">{errors.place}</div>
@@ -1183,7 +1223,7 @@ const RestaurantRegistration = () => {
                   </Col>
 
                   <Col md={4}>
-                    <Form.Label>Is Restaurant Inside Hotel? *</Form.Label>
+                    <Form.Label>Is Restaurant Inside Hotel? <span className="text-danger">*</span></Form.Label>
                     <div className="d-flex gap-3 align-items-center pt-2">
                       <Form.Check
                         type="radio"
@@ -1303,7 +1343,7 @@ const RestaurantRegistration = () => {
                   )}
 
                   <Col md={6}>
-                    <Form.Label>Address *</Form.Label>
+                    <Form.Label>Address <span className="text-danger">*</span></Form.Label>
                     <Form.Control
                       as="textarea"
                       rows={2}
@@ -1346,7 +1386,7 @@ const RestaurantRegistration = () => {
                   </Col>
 
                   <Col md={3}>
-                    <Form.Label>Contact Number *</Form.Label>
+                    <Form.Label>Contact Number <span className="text-danger">*</span></Form.Label>
                     <Form.Control
                       name="contactNumber"
                       value={formData.contactNumber}
@@ -1364,7 +1404,7 @@ const RestaurantRegistration = () => {
                     />
                   </Col>
                   <Col md={3}>
-                    <Form.Label>Email *</Form.Label>
+                    <Form.Label>Email <span className="text-danger">*</span></Form.Label>
                     <Form.Control
                       type="email"
                       name="email"
@@ -1380,7 +1420,7 @@ const RestaurantRegistration = () => {
                   </Col>
 
                   <Col md={3}>
-                    <Form.Label>Open Time *</Form.Label>
+                    <Form.Label>Open Time <span className="text-danger">*</span></Form.Label>
                     <Form.Control
                       type="time"
                       name="openTime"
@@ -1391,7 +1431,7 @@ const RestaurantRegistration = () => {
                     <Form.Control.Feedback type="invalid">{errors.openTime}</Form.Control.Feedback>
                   </Col>
                   <Col md={3}>
-                    <Form.Label>Close Time *</Form.Label>
+                    <Form.Label>Close Time <span className="text-danger">*</span></Form.Label>
                     <Form.Control
                       type="time"
                       name="closeTime"
@@ -1517,7 +1557,7 @@ const RestaurantRegistration = () => {
                   </Col>
 
                   <Col md={3}>
-                    <Form.Label>Booking Modes Offered *</Form.Label>
+                    <Form.Label>Booking Modes Offered <span className="text-danger">*</span></Form.Label>
                     <Form.Select
                       name="bookingModes"
                       value={formData.bookingModes}
@@ -1584,7 +1624,7 @@ const RestaurantRegistration = () => {
                                 />
                               </Col>
                               <Col md={5}>
-                                <Form.Label className="small mb-1">Policy *</Form.Label>
+                                <Form.Label className="small mb-1">Policy <span className="text-danger">*</span></Form.Label>
                                 <Form.Control
                                   size="sm"
                                   as="textarea"
@@ -1686,7 +1726,7 @@ const RestaurantRegistration = () => {
                                 </Button>
                               </Col>
                               <Col md={12}>
-                                <Form.Label className="small mb-1">Policy *</Form.Label>
+                                <Form.Label className="small mb-1">Policy <span className="text-danger">*</span></Form.Label>
                                 <Form.Control
                                   size="sm"
                                   as="textarea"
@@ -1876,7 +1916,7 @@ const RestaurantRegistration = () => {
                             </Form.Select>
                           </Col>
                           <Col md={3}>
-                            <Form.Label className="small mb-1">Name *</Form.Label>
+                            <Form.Label className="small mb-1">Name <span className="text-danger">*</span></Form.Label>
                             <Form.Control
                               value={p.name}
                               onChange={(e) =>
@@ -2005,11 +2045,17 @@ const RestaurantRegistration = () => {
             <Card className="mb-3 shadow-sm">
               <Card.Header className="bg-white fw-semibold">
                 <FaImages className="me-2 text-info" />
-                Restaurant Images *
+                Restaurant Images <span className="text-danger">*</span>
               </Card.Header>
               <Card.Body>
-                <Form.Control type="file" multiple accept="image/*" onChange={handleImagesUpload} />
-                {errors.images && <div className="text-danger small mt-1">{errors.images}</div>}
+                <Form.Control
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImagesUpload}
+                  isInvalid={!!errors.images}
+                />
+                <Form.Control.Feedback type="invalid">{errors.images}</Form.Control.Feedback>
 
                 {/* Existing images (only present in edit mode) — user can drop
                  *  any they don't want and the rest get re-posted to the BE. */}
@@ -2091,7 +2137,7 @@ const RestaurantRegistration = () => {
               <Card.Header className="bg-white fw-semibold d-flex justify-content-between align-items-center">
                 <span>
                   <FaFilePdf className="me-2 text-danger" />
-                  Menu PDFs
+                  Menu PDFs <span className="text-danger">*</span>
                 </span>
                 <Form.Label
                   htmlFor="menu-pdf-input"
@@ -2116,10 +2162,21 @@ const RestaurantRegistration = () => {
                 </Form.Text>
 
                 {existingMenuPdfs.length === 0 && menuPdfFiles.length === 0 ? (
-                  <div className="text-muted small fst-italic">
-                    No menu PDFs yet — click <strong>Upload PDFs</strong> to
-                    attach files.
-                  </div>
+                  /* Empty state drawn as a form-control box so it matches the
+                     Restaurant Images input and gets the same red invalid
+                     border on an empty save. Clicking it opens the PDF picker. */
+                  <label
+                    htmlFor="menu-pdf-input"
+                    className={`form-control h-auto d-flex align-items-center mb-0 text-muted small fst-italic${
+                      errors.menuPdfs ? " is-invalid" : ""
+                    }`}
+                    style={{ minHeight: 52, cursor: "pointer" }}
+                  >
+                    <span>
+                      No menu PDFs yet — click <strong>Upload PDFs</strong> to
+                      attach files.
+                    </span>
+                  </label>
                 ) : (
                   <ul className="list-unstyled mb-0">
                     {existingMenuPdfs.map((p, idx) => (
@@ -2186,7 +2243,7 @@ const RestaurantRegistration = () => {
                   </ul>
                 )}
                 {errors.menuPdfs && (
-                  <div className="text-danger small mt-2">{errors.menuPdfs}</div>
+                  <div className="invalid-feedback d-block">{errors.menuPdfs}</div>
                 )}
               </Card.Body>
             </Card>

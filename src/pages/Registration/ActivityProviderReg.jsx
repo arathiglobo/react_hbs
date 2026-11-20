@@ -313,12 +313,49 @@ const ActivityProviderReg = () => {
   };
 
   // ── validation ─────────────────────────────────────────────────────
+  // Mandatory: Provider Name, Provider Code, First Name, Last Name,
+  // Country and City. Mobile, Email and Address stay optional.
   const validateForm = (data) => {
     const errors = {};
-    if (!data.providerName?.trim())
+    const isBlank = (value) => !(value ? String(value).trim() : "");
+    if (isBlank(data.providerName))
       errors.providerName = "Provider Name is required";
+    if (isBlank(data.providerCode))
+      errors.providerCode = "Provider Code is required";
+    if (isBlank(data.firstName)) errors.firstName = "First Name is required";
+    if (isBlank(data.lastName)) errors.lastName = "Last Name is required";
+    if (!data.countryId) errors.countryId = "Country is required";
+    if (!data.cityId) errors.cityId = "City is required";
     return errors;
   };
+
+  // Drops one field's error as soon as the user edits that field.
+  const clearFieldError = (field) =>
+    setValidationErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+
+  // Sets a text field and clears its error.
+  const updateField = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    clearFieldError(field);
+  };
+
+  // react-select has no isInvalid prop, so show the error as a red border.
+  const selectStyles = (hasError) => ({
+    menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+    control: (b) =>
+      hasError
+        ? {
+            ...b,
+            borderColor: "#dc3545",
+            "&:hover": { borderColor: "#dc3545" },
+          }
+        : b,
+  });
 
   // Build the payload — sends countryId/cityId + their denormalised names
   // so the backend can persist both for fast listing.
@@ -780,10 +817,7 @@ const ActivityProviderReg = () => {
                         type="text"
                         value={formData.providerName}
                         onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            providerName: e.target.value,
-                          }))
+                          updateField("providerName", e.target.value)
                         }
                         disabled={isViewMode}
                         isInvalid={!!validationErrors.providerName}
@@ -796,18 +830,23 @@ const ActivityProviderReg = () => {
                     </Form.Group>
 
                     <Form.Group className="mb-3">
-                      <Form.Label>First Name</Form.Label>
+                      <Form.Label>
+                        <span style={{ color: "red" }}>*</span> First Name
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.firstName}
                         onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            firstName: e.target.value,
-                          }))
+                          updateField("firstName", e.target.value)
                         }
                         disabled={isViewMode}
+                        isInvalid={!!validationErrors.firstName}
                       />
+                      {validationErrors.firstName && (
+                        <Form.Control.Feedback type="invalid">
+                          {validationErrors.firstName}
+                        </Form.Control.Feedback>
+                      )}
                     </Form.Group>
 
                     <Form.Group className="mb-3">
@@ -827,7 +866,9 @@ const ActivityProviderReg = () => {
 
                     {/* Country dropdown — drives the city list below */}
                     <Form.Group className="mb-3">
-                      <Form.Label>Country</Form.Label>
+                      <Form.Label>
+                        <span style={{ color: "red" }}>*</span> Country
+                      </Form.Label>
                       <Select
                         options={countryOptions}
                         value={
@@ -843,6 +884,7 @@ const ActivityProviderReg = () => {
                             cityId: null,
                             cityName: "",
                           }));
+                          if (opt) clearFieldError("countryId");
                           // Refresh dependent city list.
                           const cities = opt
                             ? await loadCitiesForCountry(opt.value)
@@ -854,10 +896,16 @@ const ActivityProviderReg = () => {
                         isClearable
                         placeholder="Select country"
                         menuPortalTarget={document.body}
-                        styles={{
-                          menuPortal: (b) => ({ ...b, zIndex: 9999 }),
-                        }}
+                        styles={selectStyles(!!validationErrors.countryId)}
                       />
+                      {validationErrors.countryId && (
+                        <Form.Control.Feedback
+                          type="invalid"
+                          className="d-block"
+                        >
+                          {validationErrors.countryId}
+                        </Form.Control.Feedback>
+                      )}
                     </Form.Group>
 
                     <Form.Group className="mb-3">
@@ -880,33 +928,43 @@ const ActivityProviderReg = () => {
                   {/* Right column */}
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label>Provider Code</Form.Label>
+                      <Form.Label>
+                        <span style={{ color: "red" }}>*</span> Provider Code
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.providerCode}
                         onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            providerCode: e.target.value,
-                          }))
+                          updateField("providerCode", e.target.value)
                         }
                         disabled={isViewMode}
+                        isInvalid={!!validationErrors.providerCode}
                       />
+                      {validationErrors.providerCode && (
+                        <Form.Control.Feedback type="invalid">
+                          {validationErrors.providerCode}
+                        </Form.Control.Feedback>
+                      )}
                     </Form.Group>
 
                     <Form.Group className="mb-3">
-                      <Form.Label>Last Name</Form.Label>
+                      <Form.Label>
+                        <span style={{ color: "red" }}>*</span> Last Name
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.lastName}
                         onChange={(e) =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            lastName: e.target.value,
-                          }))
+                          updateField("lastName", e.target.value)
                         }
                         disabled={isViewMode}
+                        isInvalid={!!validationErrors.lastName}
                       />
+                      {validationErrors.lastName && (
+                        <Form.Control.Feedback type="invalid">
+                          {validationErrors.lastName}
+                        </Form.Control.Feedback>
+                      )}
                     </Form.Group>
 
                     <Form.Group className="mb-3">
@@ -926,7 +984,9 @@ const ActivityProviderReg = () => {
 
                     {/* City dropdown — depends on selected country */}
                     <Form.Group className="mb-3">
-                      <Form.Label>City</Form.Label>
+                      <Form.Label>
+                        <span style={{ color: "red" }}>*</span> City
+                      </Form.Label>
                       <Select
                         options={formCityOptions}
                         value={
@@ -934,13 +994,14 @@ const ActivityProviderReg = () => {
                             (o) => o.value === formData.cityId
                           ) || null
                         }
-                        onChange={(opt) =>
+                        onChange={(opt) => {
                           setFormData((prev) => ({
                             ...prev,
                             cityId: opt?.value || null,
                             cityName: opt?.label || "",
-                          }))
-                        }
+                          }));
+                          if (opt) clearFieldError("cityId");
+                        }}
                         isDisabled={isViewMode || !formData.countryId}
                         isSearchable
                         isClearable
@@ -950,10 +1011,16 @@ const ActivityProviderReg = () => {
                             : "Pick country first"
                         }
                         menuPortalTarget={document.body}
-                        styles={{
-                          menuPortal: (b) => ({ ...b, zIndex: 9999 }),
-                        }}
+                        styles={selectStyles(!!validationErrors.cityId)}
                       />
+                      {validationErrors.cityId && (
+                        <Form.Control.Feedback
+                          type="invalid"
+                          className="d-block"
+                        >
+                          {validationErrors.cityId}
+                        </Form.Control.Feedback>
+                      )}
                     </Form.Group>
                   </Col>
                 </Row>
@@ -1015,6 +1082,7 @@ const ActivityProviderReg = () => {
                         cityName: "",
                       });
                       setFormCityOptions([]);
+                      setValidationErrors({});
                     }}
                     disabled={isLoading}
                     className="d-flex align-items-center gap-2"
