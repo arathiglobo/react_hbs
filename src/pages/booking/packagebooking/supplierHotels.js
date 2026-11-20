@@ -24,6 +24,7 @@ export const SUPPLIER_LABELS = {
   RATEHAWK: "RateHawk",
   ATHARVA: "Atharva",
   DARINA: "Darina",
+  ATHARVA_V2: "ATHARVA_V2_API",
 };
 
 const normalizeCode = (code) => String(code || "").trim().toUpperCase();

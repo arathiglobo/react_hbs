@@ -135,12 +135,18 @@ const GOGLOBAL_API_ID = 21;
 // auto-cancel uses their existing cancel adapters in SupplierCancellationDispatcher.
 const X3_API_ID = 15;
 const DARINA_API_ID = 16;
+// ATHARVA_V2 (22) — separate from ATHARVA (3). Holds work like GoGlobal: the
+// booking is vouchered at the supplier and the agent's credit is taken at
+// Reconfirm (AtharvaV2HotelBookingService via SupplierHoldRule); the deadline
+// job cancels an unconfirmed hold through its cancel adapter.
+const ATHARVA_V2_API_ID = 22;
 export const HOLD_CAPABLE_API_IDS = new Set([
   GRN_API_ID,
   IWTX_API_ID,
   GOGLOBAL_API_ID,
   X3_API_ID,
   DARINA_API_ID,
+  ATHARVA_V2_API_ID,
 ]);
 
 /**
@@ -1227,6 +1233,13 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         atharvaExpectedAmount: firstRate.atharvaExpectedAmount ?? null,
         atharvaWithinTimeLimit: firstRate.atharvaWithinTimeLimit ?? null,
         atharvaPackageRate: firstRate.atharvaPackageRate ?? null,
+        // ATHARVA_V2 (apiId 22): BookingKey / TokenId / agreed supplier amount
+        // from /api/hotel-booking/rate-check/22, plus the search keys for a
+        // fresh price check if the key expires. Null for every other supplier.
+        atharvaV2:
+          Number(bookingData?.payload?.apiId) === ATHARVA_V2_API_ID
+            ? firstRate.atharvaV2 || null
+            : null,
         cityId: bookingData.payload?.cityId || null,
         nationalityId: bookingData.payload?.nationalityId || null,
         hotelName: bookingData.hotelStaticData.hotelName,

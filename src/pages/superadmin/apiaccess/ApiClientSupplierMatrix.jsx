@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Table, Form, Badge, Button, Modal } from "react-bootstrap";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
+import { apiDisplayName } from "../../../utils/apiDisplayName";
 
 /**
  * Supplier permission matrix — sibling of ApiClientPermissionMatrix.
@@ -54,7 +55,7 @@ export default function ApiClientSupplierMatrix({ clientId }) {
       kind: "single",
       target: next,
       rows: [row],
-      label: row.apiName || row.apiCode,
+      label: apiDisplayName(row.apiCode, row.apiName),
     });
   };
 
@@ -181,7 +182,7 @@ export default function ApiClientSupplierMatrix({ clientId }) {
                     />
                   </td>
                   <td><code>{row.apiCode}</code></td>
-                  <td className="fw-semibold">{row.apiName}</td>
+                  <td className="fw-semibold">{apiDisplayName(row.apiCode, row.apiName)}</td>
                   <td>
                     {row.supplierIsExternal
                       ? <Badge bg="info">External</Badge>

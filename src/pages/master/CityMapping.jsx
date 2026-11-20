@@ -20,6 +20,12 @@ import BackButton from "../../components/BackButton";
 import "../../styles/CityMapping.css";
 import AutomatedCityMappingButton from "./autocitymap/AutomatedCityMappingButton";
 
+// ATHARVA_V2 is shown as ATHARVA_V2_API, like everywhere else in the app, but
+// api_city_mapping stores it as atharva_v2: a platform whose label is not its
+// provider key is mapped here before anything is sent to the backend.
+const PLATFORM_API_PROVIDER = { ATHARVA_V2_API: "atharva_v2" };
+const apiProviderOf = (platform) => PLATFORM_API_PROVIDER[platform] || platform;
+
 const CityMapping = () => {
   const [loading, setLoading] = useState(false);
   const [mappings, setMappings] = useState([]);
@@ -39,6 +45,7 @@ const CityMapping = () => {
     "Atharva",
     "Grn",
     "Goglobal",
+    "ATHARVA_V2_API",
   ]);
 
   // Row-wise selections and status per platform in the overview table
@@ -221,6 +228,9 @@ const CityMapping = () => {
     Goglobal: {
       countries: "/api/goglobal/countrylist",
     },
+    ATHARVA_V2_API: {
+      countries: "/api/atharva-v2/countrylist",
+    },
   };
 
   const platformCityApis = {
@@ -251,6 +261,9 @@ const CityMapping = () => {
     },
     Goglobal: {
       cities: "/api/goglobal/citylist",
+    },
+    ATHARVA_V2_API: {
+      cities: "/api/atharva-v2/citylist",
     },
   };
 
@@ -383,7 +396,7 @@ const CityMapping = () => {
 
     try {
       let searchReq = {
-        apiProvider: platform.toLowerCase(),
+        apiProvider: apiProviderOf(platform).toLowerCase(),
         apiCountryId,
         apiCityId,
       };
@@ -451,7 +464,10 @@ const CityMapping = () => {
     }
 
     try {
-      const res = await axiosInstance.post("/api/cityMapping/save", formData);
+      const res = await axiosInstance.post("/api/cityMapping/save", {
+        ...formData,
+        apiProvider: apiProviderOf(formData.apiProvider),
+      });
       setMappings((prev) => [...prev, res.data]);
       toast.success("Mapping added successfully ✅");
 
@@ -490,6 +506,9 @@ const CityMapping = () => {
     // GoGlobal same shape as the others — numeric CountryId picker
     // then city picker paged from goglobal_destinations.
     Goglobal: { showCountry: true, showCity: true },
+    // ATHARVA_V2 same shape — numeric CountryId picker, then cities from
+    // atharva_v2_city (both loaded from the supplier the first time).
+    ATHARVA_V2_API: { showCountry: true, showCity: true },
     // add more platforms as needed
   };
 

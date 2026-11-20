@@ -9,7 +9,7 @@
 // supplier names, the unified room search (/api/hotel-rooms/search) appends
 // " (<SUPPLIER>)" to hotelName for hotels mapped across several suppliers.
 const SUPPLIER_SUFFIX_RE =
-  /\s*\((RATEHAWK|IWTX|ATHARVA|JUMEIRAH|DARINA|INHOUSE|X3|GRN|GOGLOBAL)\)\s*$/i;
+  /\s*\((RATEHAWK|IWTX|ATHARVA_V2|ATHARVA|JUMEIRAH|DARINA|INHOUSE|X3|GRN|GOGLOBAL)\)\s*$/i;
 
 // Main agents, sub-agents and sub-users are all agent-side logins. A sub-account
 // holds AGENT and its own role and can pick either one after login. The backend
@@ -50,7 +50,7 @@ export function stripSupplierSuffix(name) {
 }
 
 const SUPPLIER_NAME_RE =
-  /\b(atharva|darina|go\s?global|grn\w*|iol-?x|iwtx|i'?way|jumeirah|juniper|rate\s?hawk|x3)\b/gi;
+  /\b(atharva[\s_-]?v2(?:[\s_-]?api)?|atharva|darina|go\s?global|grn\w*|iol-?x|iwtx|i'?way|jumeirah|juniper|rate\s?hawk|x3)\b/gi;
 
 /**
  * Text for the screen. A supplier's own error, or a label or message written for
@@ -86,6 +86,7 @@ export function displayHotelName(name) {
 
 const SUPPLIER_NAMES = {
   ATHARVA: "Atharva",
+  ATHARVA_V2: "ATHARVA_V2_API",
   DARINA: "Darina",
   GOGLOBAL: "GoGlobal",
   GRN: "GRN",
@@ -108,6 +109,7 @@ const SUPPLIER_BY_API_ID = {
   17: "JUNIPER",
   20: "GRN",
   21: "GOGLOBAL",
+  22: "ATHARVA_V2",
 };
 
 /** True for ADMIN and SUPER_ADMIN logins. Display only: the backend enforces access itself. */
