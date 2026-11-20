@@ -66,6 +66,7 @@ export default function Stopsalereport() {
       // { label: "Cancellation Deadline Date", from: "deadlineDateFrom", to: "deadlineDateTo" },
       // { label: "Reconfirm Date", from: "reconfirmDateFrom", to: "reconfirmDateTo" },
       { label: "Cancel Date", from: "cancelDateFrom", to: "cancelDateTo" },
+      
     ];
 
     const updateBookingFilter = (field, value) =>
