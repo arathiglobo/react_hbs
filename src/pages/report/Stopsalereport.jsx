@@ -8,10 +8,13 @@ import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import HotelFilter from "../../components/filters/Hotelfilters";
-import Supplier from "../../components/filters/Supplier";
-import DestinationCity from "../../components/filters/DestinationCity";
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
+// .pagination-modern — the orange rounded pager used on /new-booking/hotel
+// and the other report pages. Every rule in this stylesheet is namespaced
+// under its own class names, so importing it here changes nothing else on
+// this page.
+import "../../styles/HotelSearch.css";
 
 export default function Stopsalereport() {
  
@@ -34,11 +37,10 @@ export default function Stopsalereport() {
     const [selectedHotel, setSelectedHotel] = useState("");
     const [isLoading, setIsLoading] = useState(false);
 
-    // Booking-level search filters (sent to /api/report/stopsale on Search)
-    // — a stop sale is listed when its hotel has at least one matching
-    // booking. Service Name is covered by the existing Hotel filter; the
-    // existing From/To Date filters the stop-sale validity, which is a
-    // different dimension than the Service (check-in) Date.
+    // Booking date filters (sent to /api/report/stopsale on Search) — a stop
+    // sale is listed when its hotel has at least one booking that falls in
+    // all the date ranges given. The Validity Date below filters the
+    // stop-sale validity, a different dimension than the Service Date.
     const initialBookingFilters = {
       serviceDateFrom: "",
       serviceDateTo: "",
@@ -50,29 +52,32 @@ export default function Stopsalereport() {
       reconfirmDateTo: "",
       cancelDateFrom: "",
       cancelDateTo: "",
-      bookingReference: "",
-      supplierReference: "",
-      city: "",
-      guestName: "",
-      branch: "",
-      status: "",
-      supplierId: "",
-      bookingType: "",
     };
     const [tempBookingFilters, setTempBookingFilters] = useState(initialBookingFilters);
+    // Booking filters behind the rows on screen (set on Search / Reset), so
+    // the mailed report matches the table even if the inputs were edited
+    // afterwards without searching again.
+    const [appliedBookingFilters, setAppliedBookingFilters] = useState(initialBookingFilters);
 
-    // Branch dropdown options (distinct booking locations)
-    const [branchOptions, setBranchOptions] = useState([]);
+    // One From/To pair per booking date filter, laid out in a 3-column grid
+    const bookingDateRanges = [
+      { label: "Service Date", from: "serviceDateFrom", to: "serviceDateTo" },
+      { label: "Booking Date", from: "bookingDateFrom", to: "bookingDateTo" },
+      // { label: "Cancellation Deadline Date", from: "deadlineDateFrom", to: "deadlineDateTo" },
+      // { label: "Reconfirm Date", from: "reconfirmDateFrom", to: "reconfirmDateTo" },
+      { label: "Cancel Date", from: "cancelDateFrom", to: "cancelDateTo" },
+    ];
 
     const updateBookingFilter = (field, value) =>
       setTempBookingFilters((prev) => ({ ...prev, [field]: value }));
 
    // ============================================
-   // FILTERING LOGIC - FETCH DATA (ONLY ON SEARCH)
+   // FILTERING LOGIC - FETCH DATA
    // ============================================
-   // No initial fetch by design - data loads when the user clicks Search.
-   // Booking-level filters are applied server-side; validity dates and the
-   // hotel keep filtering client-side as before.
+   // All stop sales load as soon as the page opens (no params = no filter);
+   // Search re-fetches with the booking-level filters, which are applied
+   // server-side. Validity dates and the hotel filter client-side on the
+   // loaded rows.
    const fetchsale = async(filters = {})=>{
     setIsLoading(true);
     try{
@@ -94,22 +99,15 @@ export default function Stopsalereport() {
     }
    };
 
+    // Initial load: show every stop sale when the page opens
+    useEffect(()=>{
+      fetchsale();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },[])
+
     useEffect(()=>{
       setCurrentPage(1);
     },[searchQuery])
-
-    // Branch dropdown options come from the distinct booking locations
-    useEffect(()=>{
-      const fetchBranches = async ()=>{
-        try{
-          const response = await axiosInstance.get("/api/report/bookings/branches");
-          setBranchOptions(Array.isArray(response.data) ? response.data : []);
-        }catch(error){
-          console.error("Branch options fetch error", error);
-        }
-      };
-      fetchBranches();
-    },[])
 
   // Function to format validityList array to string
   const formatValidity = (validityList) => {
@@ -144,21 +142,29 @@ export default function Stopsalereport() {
   
       setIsSending(true);
       try{
+        // The server re-runs the report with the filters behind the table
         const response =await axiosInstance.post('/api/reports/send-email',{
           email: emailAddress,
-          reportType:'User report',
+          reportType:'stopsale',
           filters:{
-            
-          }
+            ...appliedBookingFilters,
+            fromDate,
+            toDate,
+            hotel: selectedHotel,
+            searchQuery,
+          },
+          recordCount: filteredstopsale.length,
         })
         if (response.data){
-          toast.success("Report Sent Successfully!")
+          const sentCount = response.data.recordCount ?? filteredstopsale.length;
+          toast.success(`Report with ${sentCount} record(s) sent successfully!`)
           setShowMailModal(false);
           setEmailAddress("");
         }
       }
       catch(error){
-        toast.error("Failed to send mail")
+        console.error("Email send error:", error);
+        toast.error(error.response?.data?.message || "Failed to send mail")
       }finally{
         setIsSending(false);
       }
@@ -280,6 +286,7 @@ export default function Stopsalereport() {
     setToDate(tempToDate);
     setSelectedHotel(tempSelectedHotel);
     setCurrentPage(1);
+    setAppliedBookingFilters(tempBookingFilters);
 
     // Fetch data when search is clicked; booking-level filters server-side
     await fetchsale(tempBookingFilters);
@@ -287,6 +294,7 @@ export default function Stopsalereport() {
 
   const handleReset = async () => {
     setTempBookingFilters(initialBookingFilters);
+    setAppliedBookingFilters(initialBookingFilters);
     setTempFromDate("");
     setTempToDate("");
     setTempSelectedHotel("");
@@ -384,6 +392,33 @@ const startindex = (currentPage -1) * itemsPerPage;
 const endIndex = startindex + itemsPerPage;
 const currentStopSale = filteredstopsale.slice(startindex,endIndex);
 
+  // Page buttons, as on the other report pages: always the first 3 and last
+  // 3 pages, plus the current page and its neighbours; "…" fills each gap.
+  // A gap of a single page shows that page instead — an ellipsis there would
+  // hide nothing. 30 pages on page 1 → 1 2 3 … 28 29 30.
+  const pageNumbers = useMemo(() => {
+    const EDGE_PAGES = 3;
+    const shown = new Set();
+    for (let i = 1; i <= Math.min(EDGE_PAGES, totalPages); i++) shown.add(i);
+    for (let i = Math.max(1, totalPages - EDGE_PAGES + 1); i <= totalPages; i++) shown.add(i);
+    for (let i = Math.max(1, currentPage - 1); i <= Math.min(totalPages, currentPage + 1); i++) {
+      shown.add(i);
+    }
+    const sorted = Array.from(shown).sort((a, b) => a - b);
+    const nums = [];
+    sorted.forEach((n, idx) => {
+      const prev = sorted[idx - 1];
+      if (prev !== undefined && n - prev === 2) nums.push(prev + 1);
+      else if (prev !== undefined && n - prev > 2) nums.push(`ellipsis-${prev}`);
+      nums.push(n);
+    });
+    return nums;
+  }, [totalPages, currentPage]);
+
+  // minWidth 0 lets a From/To pair share its column instead of spilling into
+  // the next field; the slimmer right padding keeps "dd-mm-yyyy" and the
+  // calendar icon visible at that width.
+  const dateInputStyle = { minWidth: 0, paddingRight: "0.5rem" };
 
   return (
     <div className="bg-light d-flex flex-column" style={{ minHeight: "100vh" }}>
@@ -400,203 +435,85 @@ const currentStopSale = filteredstopsale.slice(startindex,endIndex);
 
             {/* Filters Section */}
             <div className="p-4 bg-light border-bottom">
+              {/* Booking Details — the From/To date ranges, 3 per row */}
               <h6 className="fw-bold text-primary mb-3">Booking Details</h6>
               <Row className="align-items-end g-4 mb-4">
-
-                {/* Row 1 — Service / Booking / Cancellation Deadline dates */}
-                <Col md={4}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Service Date</Form.Label>
-                    <div className="d-flex gap-2">
-                      <Form.Control type="date" size="sm" title="From"
-                        value={tempBookingFilters.serviceDateFrom}
-                        onChange={(e) => updateBookingFilter("serviceDateFrom", e.target.value)} />
-                      <Form.Control type="date" size="sm" title="To"
-                        value={tempBookingFilters.serviceDateTo}
-                        onChange={(e) => updateBookingFilter("serviceDateTo", e.target.value)} />
-                    </div>
-                  </Form.Group>
-                </Col>
-                <Col md={4}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Booking Date</Form.Label>
-                    <div className="d-flex gap-2">
-                      <Form.Control type="date" size="sm" title="From"
-                        value={tempBookingFilters.bookingDateFrom}
-                        onChange={(e) => updateBookingFilter("bookingDateFrom", e.target.value)} />
-                      <Form.Control type="date" size="sm" title="To"
-                        value={tempBookingFilters.bookingDateTo}
-                        onChange={(e) => updateBookingFilter("bookingDateTo", e.target.value)} />
-                    </div>
-                  </Form.Group>
-                </Col>
-                <Col md={4}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
-                    <div className="d-flex gap-2">
-                      <Form.Control type="date" size="sm" title="From"
-                        value={tempBookingFilters.deadlineDateFrom}
-                        onChange={(e) => updateBookingFilter("deadlineDateFrom", e.target.value)} />
-                      <Form.Control type="date" size="sm" title="To"
-                        value={tempBookingFilters.deadlineDateTo}
-                        onChange={(e) => updateBookingFilter("deadlineDateTo", e.target.value)} />
-                    </div>
-                  </Form.Group>
-                </Col>
-
-                {/* Row 2 — Reconfirm / Cancel dates */}
-                <Col md={4}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
-                    <div className="d-flex gap-2">
-                      <Form.Control type="date" size="sm" title="From"
-                        value={tempBookingFilters.reconfirmDateFrom}
-                        onChange={(e) => updateBookingFilter("reconfirmDateFrom", e.target.value)} />
-                      <Form.Control type="date" size="sm" title="To"
-                        value={tempBookingFilters.reconfirmDateTo}
-                        onChange={(e) => updateBookingFilter("reconfirmDateTo", e.target.value)} />
-                    </div>
-                  </Form.Group>
-                </Col>
-                <Col md={4}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Cancel Date</Form.Label>
-                    <div className="d-flex gap-2">
-                      <Form.Control type="date" size="sm" title="From"
-                        value={tempBookingFilters.cancelDateFrom}
-                        onChange={(e) => updateBookingFilter("cancelDateFrom", e.target.value)} />
-                      <Form.Control type="date" size="sm" title="To"
-                        value={tempBookingFilters.cancelDateTo}
-                        onChange={(e) => updateBookingFilter("cancelDateTo", e.target.value)} />
-                    </div>
-                  </Form.Group>
-                </Col>
-                <Col md={4} />
-
-                {/* Row 3 — reference / guest text filters */}
-                <Col md={4}>
-                  <Form.Control size="sm" placeholder="Booking Reference"
-                    value={tempBookingFilters.bookingReference}
-                    onChange={(e) => updateBookingFilter("bookingReference", e.target.value)} />
-                </Col>
-                <Col md={4}>
-                  <Form.Control size="sm" placeholder="Supplier Reference No."
-                    value={tempBookingFilters.supplierReference}
-                    onChange={(e) => updateBookingFilter("supplierReference", e.target.value)} />
-                </Col>
-                <Col md={4}>
-                  <Form.Control size="sm" placeholder="Guest Name"
-                    value={tempBookingFilters.guestName}
-                    onChange={(e) => updateBookingFilter("guestName", e.target.value)} />
-                </Col>
-
-                {/* Row 4 — city / branch / status */}
-                <Col md={4}>
-                  <DestinationCity
-                    value={tempBookingFilters.city}
-                    onChange={(cityName) => updateBookingFilter("city", cityName)}
-                  />
-                </Col>
-                <Col md={4}>
-                  <Form.Select size="sm"
-                    value={tempBookingFilters.branch}
-                    onChange={(e) => updateBookingFilter("branch", e.target.value)}>
-                    <option value="">Select Branch</option>
-                    {branchOptions.map((branch) => (
-                      <option key={branch} value={branch}>{branch}</option>
-                    ))}
-                  </Form.Select>
-                </Col>
-                <Col md={4}>
-                  <Form.Select size="sm"
-                    value={tempBookingFilters.status}
-                    onChange={(e) => updateBookingFilter("status", e.target.value)}>
-                    <option value="">ALL</option>
-                    <option value="REQUESTED">Requested</option>
-                    <option value="CONFIRMED">Confirmed</option>
-                    <option value="RECONFIRMED">ReConfirmed</option>
-                    <option value="SOLD_OUT">Sold Out</option>
-                    <option value="CANCELLED">Cancelled</option>
-                  </Form.Select>
-                </Col>
-
-                {/* Row 5 — supplier / service type */}
-                <Col md={4}>
-                  <Supplier
-                    value={tempBookingFilters.supplierId}
-                    onChange={(id) => updateBookingFilter("supplierId", String(id))}
-                  />
-                </Col>
-                <Col md={4}>
-                  <Form.Select size="sm"
-                    value={tempBookingFilters.bookingType}
-                    onChange={(e) => updateBookingFilter("bookingType", e.target.value)}>
-                    <option value="">All Services</option>
-                    <option value="NORMAL">Normal</option>
-                    <option value="LAST_MINUTE">Last Minute</option>
-                  </Form.Select>
-                </Col>
-                <Col md={4} />
+                {bookingDateRanges.map(({ label, from, to }) => (
+                  <Col md={4} key={from}>
+                    <Form.Group className="mb-0">
+                      <Form.Label className="small mb-2">{label}</Form.Label>
+                      <div className="d-flex gap-2">
+                        <Form.Control type="date" size="sm" title="From" style={dateInputStyle}
+                          aria-label={`${label} from`}
+                          value={tempBookingFilters[from]}
+                          onChange={(e) => updateBookingFilter(from, e.target.value)} />
+                        <Form.Control type="date" size="sm" title="To" style={dateInputStyle}
+                          aria-label={`${label} to`}
+                          value={tempBookingFilters[to]}
+                          min={tempBookingFilters[from] || undefined}
+                          onChange={(e) => updateBookingFilter(to, e.target.value)} />
+                      </div>
+                    </Form.Group>
+                  </Col>
+                ))}
               </Row>
 
+              {/* Stop Sale Details — validity range and hotel, on the same
+                  3-column grid as the booking dates above */}
               <h6 className="fw-bold text-primary mb-3">Stop Sale Details</h6>
               <Row className="align-items-end g-4">
-                <Col md={3}>
+                <Col md={4}>
                   <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control
-                      type="date"
-                      size="sm"
-                      value={tempFromDate}
-                      onChange={(e) => setTempFromDate(e.target.value)}
-                    />
+                    <Form.Label className="small mb-2">Validity Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control
+                        type="date"
+                        size="sm"
+                        title="From"
+                        style={dateInputStyle}
+                        aria-label="Validity date from"
+                        value={tempFromDate}
+                        onChange={(e) => setTempFromDate(e.target.value)}
+                      />
+                      <Form.Control
+                        type="date"
+                        size="sm"
+                        title="To"
+                        style={dateInputStyle}
+                        aria-label="Validity date to"
+                        value={tempToDate}
+                        onChange={(e) => setTempToDate(e.target.value)}
+                        min={tempFromDate || undefined}
+                      />
+                    </div>
                   </Form.Group>
                 </Col>
-                <Col md={3}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control
-                      type="date"
-                      size="sm"
-                      value={tempToDate}
-                      onChange={(e) => setTempToDate(e.target.value)}
-                      min={tempFromDate || undefined}
-                    />
-                  </Form.Group>
-                </Col>
-                <Col md={3}>
+                <Col md={4}>
                  <HotelFilter
                    value={tempSelectedHotel}
                    onChange={setTempSelectedHotel}
                  />
                 </Col>
-                <Col md={3}>
-                  <div className="d-flex gap-2">
-                    <Button
-                      variant="success"
-                      className="w-50"
-                      size="sm"
-                      style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}
-                      disabled={isLoading}
-                    >
-                      <i className="fas fa-search me-1"></i>Search
-                    </Button>
-                    <Button
-                      variant="outline-secondary"
-                      className="w-50"
-                      size="sm"
-                      onClick={handleReset}
-                      disabled={isLoading}
-                    >
-                      <i className="fas fa-undo me-1"></i>Reset
-                    </Button>
-                  </div>
-                </Col>
               </Row>
 
-              {/* Action Buttons */}
-              <Row className="mt-4">
-                <Col md={12} className="d-flex gap-2 justify-content-end">
+              {/* One action row — quick search on the left; Search / Reset /
+                  Mail / Print / PDF / Excel on the right (as on Online Daily Sales) */}
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-4">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e)=>setSearchQuery(e.target.value)}
+                  placeholder="search here"
+                  className="form-control form-control-sm"
+                  style={{ width: 200 }}
+                />
+                <div className="d-flex flex-wrap justify-content-end align-items-center gap-2">
+                  <Button variant="success" size="sm" className="px-4" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch} disabled={isLoading}>
+                    <i className="fas fa-search me-1"></i>Search
+                  </Button>
+                  <Button variant="outline-secondary" size="sm" className="px-4" onClick={handleReset} disabled={isLoading}>
+                    <i className="fas fa-undo me-1"></i>Reset
+                  </Button>
                   <Button variant="outline-primary" size="sm" onClick={()=>setShowMailModal(true)}>
                     <i className="fas fa-envelope me-1"></i>Mail
                   </Button>
@@ -609,29 +526,16 @@ const currentStopSale = filteredstopsale.slice(startindex,endIndex);
                   <Button variant="outline-success" size="sm" onClick={handleExcel}>
                     <i className="fas fa-file-excel me-1"></i>Excel
                   </Button>
-                </Col>
-              </Row>
-
-              {/* Search Input */}
-              <Row className="mt-3">
-                <Col className="d-flex justify-content-end">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e)=>setSearchQuery(e.target.value)}
-                    placeholder="search here"
-                    className="form-control form-control-sm w-auto"
-                  />
-                </Col>
-              </Row>
+                </div>
+              </div>
             </div>
 
             {/* Table Section */}
             <Card.Body className="p-0 mt-1">
               <Table responsive hover striped className="mb-0 align-middle">
-                <thead>
+                <thead className="align-middle">
                   <tr>
-                    <th style={{ width: 100 }}>S/N</th>
+                    <th style={{ width: 60 }}>S/N</th>
                     <th>Hotel Name</th>
                     <th>Market</th>
                     <th>Type</th>
@@ -640,7 +544,14 @@ const currentStopSale = filteredstopsale.slice(startindex,endIndex);
                   </tr>
                 </thead>
                 <tbody>
-                  {currentStopSale.length > 0 ? (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan="6" className="text-center text-muted py-4">
+                        <Spinner animation="border" size="sm" className="me-2" />
+                        Loading...
+                      </td>
+                    </tr>
+                  ) : currentStopSale.length > 0 ? (
                     currentStopSale.map((s, index) => (
                       <tr key={s.id}>
                         <td>{startindex + index + 1}</td>
@@ -662,46 +573,51 @@ const currentStopSale = filteredstopsale.slice(startindex,endIndex);
               
               </Table>
 
-              {/* Pagination */}
-              <div className="d-flex justify-content-between align-items-center p-3 border-top">
-                <div>
+              {/* Pagination — page size and entry count on the left */}
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 p-3 border-top">
+                <div className="d-flex flex-wrap align-items-center gap-3">
+                  <div className="d-flex align-items-center">
+                    <span className="text-muted">Display</span>
+                    <Form.Select size="sm" className="d-inline-block ms-2" style={{width: '80px'}}
+                      value={itemsPerPage}
+                      onChange={(e)=>{setItemsPerPage(Number(e.target.value))
+                        setCurrentPage(1);
+                      }}>
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </Form.Select>
+                    <span className="text-muted ms-2">records</span>
+                  </div>
                   <small className="text-muted">
                     Showing {filteredstopsale.length > 0 ? startindex + 1 : 0} to {Math.min(endIndex, filteredstopsale.length)} of {filteredstopsale.length} entries
                   </small>
                 </div>
-                <div>
-                  <Pagination className="mb-0">
-                    <Pagination.Prev onClick={()=>setCurrentPage(prev=>Math.max(1,prev-1))}
-                      disabled={currentPage === 1}/>
-
-                    {Array.from({length:totalPages},(_,i)=>i+1).map((pageNum)=>{
-                      if(
-                        pageNum === 1||
-                        pageNum === totalPages ||
-                        (pageNum >= currentPage -1 && pageNum <=currentPage+1)
-                      ){
-                        return(
-                          <Pagination.Item
-                          key={pageNum}
-                          active={pageNum===currentPage}
-                          onClick={()=>setCurrentPage(pageNum)}>
-                            {pageNum}
-                          </Pagination.Item>
-                        )
-                      }else if(
-                        pageNum === currentPage -2||
-                        pageNum === currentPage +2
-                      ){
-                        return <Pagination.Ellipsis key={pageNum}/>;
-                      }
-                      return null;
-                    })}
-
-                    <Pagination.Next onClick={()=>setCurrentPage(prev=>Math.min(totalPages,prev+1))}
-                      disabled={currentPage === totalPages || totalPages === 0}/>
-
-                  </Pagination>
-                </div>
+                {/* The /new-booking/hotel pager (pagination-modern) */}
+                <Pagination className="mb-0 pagination-modern">
+                  <Pagination.Prev
+                    disabled={currentPage === 1 || totalPages === 0}
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  />
+                  {pageNumbers.map((n) =>
+                    typeof n === "number" ? (
+                      <Pagination.Item
+                        key={n}
+                        active={n === currentPage}
+                        onClick={() => setCurrentPage(n)}
+                      >
+                        {n}
+                      </Pagination.Item>
+                    ) : (
+                      <Pagination.Ellipsis key={n} disabled />
+                    ),
+                  )}
+                  <Pagination.Next
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  />
+                </Pagination>
               </div>
             </Card.Body>
           </Card>

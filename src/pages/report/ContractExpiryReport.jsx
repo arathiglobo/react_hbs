@@ -574,7 +574,7 @@ const handleSendEmail = async () => {
 
               <h6 className="fw-bold text-primary mb-3">Contract Details</h6>
               <Row className="align-items-end g-4">
-                <Col md={2}>
+                <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
                     <Form.Control
@@ -585,7 +585,7 @@ const handleSendEmail = async () => {
                     />
                   </Form.Group>
                 </Col>
-                <Col md={2}>
+                <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
                     <Form.Control 
@@ -596,37 +596,43 @@ const handleSendEmail = async () => {
                     />
                   </Form.Group>
                 </Col>
-                <Col md={2}>
+                <Col md={4}>
                   <HotelFilter
                     value={tempSelectedHotel}
                     onChange={setTempSelectedHotel}
                   />
                 </Col>
-                <Col md={2}>
-                  <Button 
-                    variant="success" 
-                    size="sm" 
-                    className="w-100"
-                    style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}
+              </Row>
+
+              {/* One line: "search here" box on the left;
+                  Search / Reset / Mail / Print / PDF / Excel on the right */}
+              <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
+                <input
+                  type="text"
+                  value={tableSearch}
+                  onChange={(e)=>setTableSearch(e.target.value)}
+                  placeholder="search here"
+                  className="form-control form-control-sm"
+                  style={{ width: "200px" }}
+                />
+
+                <div className="d-flex gap-2 flex-wrap">
+                  <Button
+                    variant="success"
+                    size="sm"
+                    style={{ backgroundColor: "#676767", borderColor: "#676767", minWidth: "100px" }}
+                    onClick={handleSearch}
                   >
                     <i className="fas fa-search me-1"></i>Search
                   </Button>
-                </Col>
-                <Col md={2}>
-                  <Button 
-                    variant="outline-secondary" 
-                    size="sm" 
-                    className="w-100"
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    style={{ minWidth: "100px" }}
                     onClick={handleReset}
                   >
                     <i className="fas fa-redo me-1"></i>Reset
                   </Button>
-                </Col>
-              </Row>
-
-              {/* Action Buttons */}
-              <Row className="mt-4">
-                <Col md={12} className="d-flex gap-2 justify-content-end">
                   <Button variant="outline-primary" size="sm" onClick={() => setShowMailModal(true)}>
                     <i className="fas fa-envelope me-1"></i>Mail
                   </Button>
@@ -639,13 +645,13 @@ const handleSendEmail = async () => {
                   <Button variant="outline-success" size="sm" onClick={handleExcel}>
                     <i className="fas fa-file-excel me-1"></i>Excel
                   </Button>
-                </Col>
-              </Row>
+                </div>
+              </div>
             </div>
 
             {/* Table Section */}
             <Card.Body className="p-0 mt-1">
-              {/* Display and Search Row */}
+              {/* Display Row (the search box is in the toolbar above) */}
               <div className="p-2 border-bottom">
                 <Row className="d-flex justify-content-between align-items-center">
                   <Col md="auto">
@@ -666,15 +672,6 @@ const handleSendEmail = async () => {
                       <option value={100}>100</option>
                     </Form.Select>
                     <span className="text-muted ms-2">records</span>
-                  </Col>
-                  <Col md="auto">
-                    <input
-                      type="text"
-                      value={tableSearch}
-                      onChange={(e)=>setTableSearch(e.target.value)}
-                      placeholder="search here"
-                      className="form-control form-control-sm w-auto"
-                    />
                   </Col>
                 </Row>
               </div>

@@ -15,7 +15,8 @@ export default function UserReport() {
   // Dummy data
   const users = [];
 
-  const [reportType, setReportType] = useState("");
+  // Default to "Contract Rate" so the page opens with it selected and its data loaded
+  const [reportType, setReportType] = useState("Contract Rate");
   const [contracts, setContracts] = useState([]);
   const [specialRates, setSpecialRates] = useState([]);
   const [agents, setAgents] = useState([]);
@@ -53,7 +54,8 @@ export default function UserReport() {
       }
     }
     catch(error){
-      toast.error("Failed to send mail")
+      // Show the server's reason (e.g. not allowed, unknown option) when it gives one
+      toast.error(error?.response?.data?.message || "Failed to send mail")
     }finally{
       setIsSending(false);
     }
