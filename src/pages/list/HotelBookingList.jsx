@@ -32,6 +32,7 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import RoomCountSummary from "../../components/RoomCountSummary";
+import { getPaginationItems } from "../../utils/paginationItems";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -332,9 +333,17 @@ const HotelBookingList = ({
   // we fetch the entire dataset for the active Booking Type and let the
   // client-side filter run across everything, so a search isn't limited to
   // the rows currently on screen.
-  const isClientFiltering = Boolean(
-    (search || "").trim() || (checkInDateFilter || "").trim(),
-  );
+  //
+  // The Religious Booking List (religiousOnly) is always in this mode. The API
+  // has no religious filter, so paging on the server and keeping only the
+  // religious rows of each page gave wrong totals and empty pages (1 entry
+  // spread over 5 page buttons). Loading the whole bucket and paging the
+  // religious rows in the browser makes the count, "Showing X to Y of Z" and
+  // the page buttons come from religious rows alone. The regular hotel and
+  // 24-hour lists (religiousOnly false) are unaffected.
+  const isClientFiltering =
+    religiousOnly ||
+    Boolean((search || "").trim() || (checkInDateFilter || "").trim());
   const statusOptions = useMemo(
     () => [
       { value: "all", label: "All" },
@@ -1038,10 +1047,10 @@ const HotelBookingList = ({
       !!(b && (b.religiousBooking || b.isReligiousBooking || b.IsReligiousBooking));
 
     if (religiousOnly) {
-      // Religious Booking List: keep ONLY religious rows. Pagination is
-      // still server-side today (no is_religious_booking filter on the
-      // API), so the client-side filter is both the primary gate and the
-      // safety net. Totals reflect the filtered visible count.
+      // Religious Booking List: keep ONLY religious rows. The API has no
+      // religious filter, so this page always loads the whole bucket
+      // (isClientFiltering is true for religiousOnly) and pages the
+      // religious rows in the browser — see safeTotalPages / displayedBookings.
       const filtered = (currentBookings || []).filter(isRel);
       setBookings(filtered);
       setTotalPages(paginationMeta.totalPages || 0);
@@ -2439,7 +2448,30 @@ const HotelBookingList = ({
                           opacity: currentPage === 1 ? 0.5 : 1,
                         }}
                       />
-                      {(() => {
+                      {religiousOnly ? (
+                        // Religious Booking List only: first 3 … current ±1 …
+                        // last 3, the same page buttons as the senior-citizen,
+                        // package and MYOP lists. The regular hotel and
+                        // 24-hour lists keep the sliding window below.
+                        getPaginationItems(safeTotalPages, currentPage).map((item) =>
+                          typeof item === "number" ? (
+                            <Pagination.Item
+                              key={item}
+                              active={currentPage === item}
+                              onClick={() => handlePageChange(item)}
+                              style={{
+                                cursor: "pointer",
+                                minWidth: "38px",
+                                textAlign: "center",
+                              }}
+                            >
+                              {item}
+                            </Pagination.Item>
+                          ) : (
+                            <Pagination.Ellipsis key={item} disabled />
+                          ),
+                        )
+                      ) : (() => {
                         // Sliding window: show at most 5 page tabs at a time,
                         // centered on the current page. Prev/Next behavior is
                         // unchanged and continues to move one page at a time,
