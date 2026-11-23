@@ -36,6 +36,10 @@ import {
 } from "../../../utils/refundLabel";
 import { sanitizeRichHtml } from "../../../utils/safeHtml";
 import { orderIdPathSegment } from "../../../utils/urlSafety";
+import {
+  CCAVENUE_OUTCOME,
+  confirmCCAvenuePayment,
+} from "../../../utils/ccavenuePayment";
 
 // Mirrors HotelBookingPage — the sole online-payment gateway surfaced when
 // the agent's available credit falls short of the booking amount. CCAvenue
@@ -515,28 +519,20 @@ export default function DayStayBookingPage() {
 
     // CC Avenue path — verify server-side, then let the backend finalize.
     (async () => {
-      if (ccavenueStatus !== "success") {
-        toast.error("Payment was not completed. Please try again.");
-        sessionStorage.removeItem("dayStayPendingCreatePayload");
-        return;
-      }
-      try {
-        const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
-        );
-        if (statusResponse.data?.status !== "SUCCESS") {
-          toast.error(
-            statusResponse.data?.statusMessage ||
-              "Payment was not successful. Please try again.",
-          );
+      // Confirm the payment with the backend first. A "verifying" return
+      // (bank said paid, CC Avenue's status API not yet) is waited for
+      // instead of being shown as "Payment was not completed".
+      // Buttons stay disabled while the payment is being verified.
+      setIsSubmitting(true);
+      const outcome = await confirmCCAvenuePayment(
+        ccavenueOrderId,
+        ccavenueStatus,
+      );
+      if (outcome !== CCAVENUE_OUTCOME.PAID) {
+        setIsSubmitting(false);
+        if (outcome === CCAVENUE_OUTCOME.NOT_PAID) {
           sessionStorage.removeItem("dayStayPendingCreatePayload");
-          return;
         }
-      } catch (err) {
-        console.error("Could not verify CC Avenue payment status:", err);
-        toast.error(
-          "Could not verify payment status. Please contact support if you were charged.",
-        );
         return;
       }
       // Payment is confirmed — ask the backend to create the booking from

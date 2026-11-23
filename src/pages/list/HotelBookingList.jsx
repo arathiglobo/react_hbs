@@ -33,6 +33,10 @@ import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import RoomCountSummary from "../../components/RoomCountSummary";
 import "../../styles/HotelBookingListModern.css";
+// .pagination-modern — the orange rounded pager used on /new-booking/hotel and
+// the report pages. Every rule in this stylesheet is namespaced under its own
+// class names, so importing it here changes nothing else on this page.
+import "../../styles/HotelSearch.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 // When the user has an active client-side filter (search or Check-in Date),
@@ -1237,6 +1241,29 @@ const HotelBookingList = ({
       ? totalPages
       : Math.max(1, Math.ceil((totalEntries || 0) / currentPerPage));
 
+  // Page buttons, as on the report pages: always the first 3 and last 3
+  // pages, plus the current page and its neighbours; "…" fills each gap. A
+  // gap of a single page shows that page instead — an ellipsis there would
+  // hide nothing. 30 pages on page 1 → 1 2 3 … 28 29 30.
+  const pageNumbers = useMemo(() => {
+    const EDGE_PAGES = 3;
+    const shown = new Set();
+    for (let i = 1; i <= Math.min(EDGE_PAGES, safeTotalPages); i++) shown.add(i);
+    for (let i = Math.max(1, safeTotalPages - EDGE_PAGES + 1); i <= safeTotalPages; i++) shown.add(i);
+    for (let i = Math.max(1, currentPage - 1); i <= Math.min(safeTotalPages, currentPage + 1); i++) {
+      shown.add(i);
+    }
+    const sorted = Array.from(shown).sort((a, b) => a - b);
+    const nums = [];
+    sorted.forEach((n, idx) => {
+      const prev = sorted[idx - 1];
+      if (prev !== undefined && n - prev === 2) nums.push(prev + 1);
+      else if (prev !== undefined && n - prev > 2) nums.push(`ellipsis-${prev}`);
+      nums.push(n);
+    });
+    return nums;
+  }, [safeTotalPages, currentPage]);
+
   // Colour each "/"-separated segment of a confirmation status independently,
   // mirroring the booking detail view's StatusBadge so the list and the detail
   // page stay consistent: Confirmed / ReConfirmed → green, Cancelled → red,
@@ -2003,9 +2030,22 @@ const HotelBookingList = ({
                                     width: COLUMN_WIDTHS.bookingDetails,
                                   }}
                                 >
+                                  {/* On the dedicated 24-Hour page every row is
+                                      24-hour, so the "24H" badge is dropped and
+                                      the stay dates sit on their own line under
+                                      the hotel name. The regular list keeps the
+                                      badge and the inline layout. */}
                                   <div
-                                    className="d-flex align-items-center"
-                                    style={{ gap: "0.35rem", flexWrap: "wrap" }}
+                                    className={
+                                      force24HourOnly
+                                        ? "d-flex flex-column align-items-start"
+                                        : "d-flex align-items-center"
+                                    }
+                                    style={
+                                      force24HourOnly
+                                        ? { gap: "0.15rem" }
+                                        : { gap: "0.35rem", flexWrap: "wrap" }
+                                    }
                                   >
                                     <span
                                       className="fw-semibold text-dark"
@@ -2013,7 +2053,7 @@ const HotelBookingList = ({
                                     >
                                       {b.hotelName || "-"}
                                     </span>
-                                    {b.is24HourCheckin && (
+                                    {b.is24HourCheckin && !force24HourOnly && (
                                       <span
                                         className="badge bg-warning-subtle text-warning border border-warning-subtle"
                                         style={{ fontSize: "0.65rem", padding: "2px 6px" }}
@@ -2428,65 +2468,33 @@ const HotelBookingList = ({
                         ))}
                       </Form.Select>
                     </div>
-                    <Pagination className="mb-0">
+                    {/* The /new-booking/hotel pager (pagination-modern) */}
+                    <Pagination className="mb-0 pagination-modern">
                       <Pagination.Prev
                         disabled={currentPage === 1}
                         onClick={() =>
                           currentPage > 1 && handlePageChange(currentPage - 1)
                         }
-                        style={{
-                          cursor: currentPage === 1 ? "not-allowed" : "pointer",
-                          opacity: currentPage === 1 ? 0.5 : 1,
-                        }}
                       />
-                      {(() => {
-                        // Sliding window: show at most 5 page tabs at a time,
-                        // centered on the current page. Prev/Next behavior is
-                        // unchanged and continues to move one page at a time,
-                        // shifting the window as needed (e.g. 1..5, 2..6, ...).
-                        const windowSize = 5;
-                        const startPage = Math.max(
-                          1,
-                          Math.min(
-                            currentPage - Math.floor(windowSize / 2),
-                            safeTotalPages - windowSize + 1,
-                          ),
-                        );
-                        const endPage = Math.min(
-                          safeTotalPages,
-                          startPage + windowSize - 1,
-                        );
-                        return Array.from(
-                          { length: endPage - startPage + 1 },
-                          (_, i) => startPage + i,
-                        ).map((pageNumber) => (
+                      {pageNumbers.map((n) =>
+                        typeof n === "number" ? (
                           <Pagination.Item
-                            key={pageNumber}
-                            active={currentPage === pageNumber}
-                            onClick={() => handlePageChange(pageNumber)}
-                            style={{
-                              cursor: "pointer",
-                              minWidth: "38px",
-                              textAlign: "center",
-                            }}
+                            key={n}
+                            active={n === currentPage}
+                            onClick={() => handlePageChange(n)}
                           >
-                            {pageNumber}
+                            {n}
                           </Pagination.Item>
-                        ));
-                      })()}
+                        ) : (
+                          <Pagination.Ellipsis key={n} disabled />
+                        ),
+                      )}
                       <Pagination.Next
-                        disabled={currentPage === safeTotalPages}
+                        disabled={currentPage >= safeTotalPages}
                         onClick={() =>
                           currentPage < safeTotalPages &&
                           handlePageChange(currentPage + 1)
                         }
-                        style={{
-                          cursor:
-                            currentPage === safeTotalPages
-                              ? "not-allowed"
-                              : "pointer",
-                          opacity: currentPage === safeTotalPages ? 0.5 : 1,
-                        }}
                       />
                     </Pagination>
                   </div>
