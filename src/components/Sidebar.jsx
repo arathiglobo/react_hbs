@@ -32,6 +32,7 @@ import { isAgentComingSoon, COMING_SOON_TITLE } from "../config/agentComingSoon"
 import { isPartnerRole } from "../config/partnerFeatures";
 import PartnerSidebar from "./PartnerSidebar";
 import { getUserRole, getCurrentActiveRole, setCurrentActiveRole, getUserName } from "../utils/authSession";
+import useHiddenMenuCodes from "../hooks/useHiddenMenuCodes";
 
 
 let labelForDashboard = " ";
@@ -114,13 +115,6 @@ export default function Sidebar() {
   const [hotelId, setHotelId] = useState(null);
 
   /**
-   * Codes that super_admin has explicitly HIDDEN for the caller's role,
-   * fetched once on mount from /api/sidebar/hidden-menus. Empty set on
-   * error → sidebar keeps its full hardcoded menu (fail-open, so a
-   * transient DB hiccup never blanks the sidebar).
-   */
-  const [hiddenCodes, setHiddenCodes] = useState(() => new Set());
-  /**
    * PENDING self-registration counts per Approvals submenu entry, keyed by
    * the child's menu code. The Approvals label shows their sum so admins
    * see there's queue work without opening the menu; once expanded, each
@@ -128,11 +122,6 @@ export default function Sidebar() {
    * fetch it.
    */
   const [approvalsPendingByCode, setApprovalsPendingByCode] = useState({});
-  // Entries hidden by super_admin are left out so the total always equals
-  // the sum of the counts visible in the expanded submenu.
-  const approvalsPendingCount = Object.entries(approvalsPendingByCode)
-    .filter(([code]) => !hiddenCodes.has(code))
-    .reduce((sum, [, n]) => sum + n, 0);
 
   // Desktop sidebar collapse (remembered across reloads). When collapsed the
   // <aside> is removed so the page content reclaims the space, and a small
@@ -190,6 +179,19 @@ export default function Sidebar() {
     getCurrentActiveRole().toLowerCase() ||
     storedRoles[0] ||
     "";
+
+  /**
+   * Codes that super_admin has explicitly HIDDEN for the caller's role
+   * (Masters → Assign Menu). Empty set on error → sidebar keeps its full
+   * hardcoded menu (fail-open, so a transient DB hiccup never blanks the
+   * sidebar). Applied via roleAllows in renderSidebar.
+   */
+  const hiddenCodes = useHiddenMenuCodes(currentRole);
+  // Entries hidden by super_admin are left out so the total always equals
+  // the sum of the counts visible in the expanded submenu.
+  const approvalsPendingCount = Object.entries(approvalsPendingByCode)
+    .filter(([code]) => !hiddenCodes.has(code))
+    .reduce((sum, [, n]) => sum + n, 0);
 
   // Sub-account (sub-agent / sub-user) logins use a "prefix.mainAgent"
   // username, which always contains a dot; main-agent login usernames are
@@ -268,38 +270,6 @@ export default function Sidebar() {
     })();
     return () => {
       cancelled = true;
-    };
-  }, [currentRole]);
-
-  // Fetch the per-role hidden-menu set from the backend once per role
-  // change. Fail-open — any error keeps the full hardcoded menu visible,
-  // so a network hiccup can never blank the sidebar. Applied via
-  // roleAllows below (returns false when the item's code is in the set).
-  // Also re-fetched when the Assign Menu screen saves or resets a role
-  // ("sidebarHiddenMenusChanged"), so the change shows without a reload.
-  useEffect(() => {
-    if (!currentRole) {
-      setHiddenCodes(new Set());
-      return undefined;
-    }
-    let cancelled = false;
-    const loadHiddenCodes = async () => {
-      try {
-        const res = await axiosInstance.get("/api/sidebar/hidden-menus", {
-          params: { role: currentRole },
-        });
-        if (cancelled) return;
-        const codes = Array.isArray(res?.data?.codes) ? res.data.codes : [];
-        setHiddenCodes(new Set(codes));
-      } catch (_) {
-        if (!cancelled) setHiddenCodes(new Set());
-      }
-    };
-    loadHiddenCodes();
-    window.addEventListener("sidebarHiddenMenusChanged", loadHiddenCodes);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("sidebarHiddenMenusChanged", loadHiddenCodes);
     };
   }, [currentRole]);
 
