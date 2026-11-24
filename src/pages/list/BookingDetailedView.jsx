@@ -1186,7 +1186,7 @@ export default function BookingDetailedView() {
   const saveConfirmationNo = async () => {
     const value = (confirmationNoInput || "").trim();
     if (!value) {
-      setConfirmationNoError("Confirmation Number is required");
+      setConfirmationNoError("Hotel Confirmation Number is required");
       return;
     }
     setConfirmationNoError("");
@@ -1493,6 +1493,74 @@ export default function BookingDetailedView() {
   const currencyFactor = isConvertedCurrency ? _dispAmt / _aedTotal : 1;
   const toDisplayAmount = (aed) => (Number(aed) || 0) * currencyFactor;
 
+  // Supplier payable — what our company owes the supplier for this booking,
+  // shown to admin / super-admin on the "Payable to Supplier" row (with the
+  // Invoice Amount and Markup Adjusted rows under it). It is the booking's net total in the
+  // invoice (display) currency: markupBreakdown.supplierPayableAmount from the
+  // backend (totalRateWithoutMarkup, or the rooms' net rates when that total
+  // was never saved), else totalRateWithoutMarkup itself — the cost before our
+  // markup (for INHOUSE, the hotel's contract cost; the same "net price" the
+  // booking reports use). Never the selling total (totalRate): that includes
+  // our markup and is what the agent is invoiced.
+  // The supplier's own confirmed figure (supplierNativeAmount +
+  // supplierNativeCurrency, saved by IWTX / X3 / GRN / Atharva) is kept as a
+  // small note when it is in another currency (e.g. "supplier: USD 241.68"),
+  // and in red when it claims the invoice currency but is more than 5% off
+  // the net — the sign of a mislabelled currency (seen on an IWTX sandbox
+  // booking: USD 241.68 saved as "AED", net AED 886.97 = 241.68 × 3.67). The
+  // 5% slack absorbs exchange-rate drift for non-AED display currencies. A
+  // matching figure in the same currency adds nothing, so no note. Falls back
+  // to the supplier figure alone only when no net total is saved.
+  // `text` is null when no amount is known at all.
+  const supplierPayable = (() => {
+    const nativeCurr = booking?.supplierNativeCurrency;
+    const nativeAmt = Number(booking?.supplierNativeAmount);
+    const hasNative =
+      !!nativeCurr && Number.isFinite(nativeAmt) && nativeAmt > 0;
+    const netAmt = Number(
+      booking?.markupBreakdown?.supplierPayableAmount ??
+        booking?.totalRateWithoutMarkup,
+    );
+    const hasNet = Number.isFinite(netAmt) && netAmt > 0;
+    const netDisplay = toDisplayAmount(netAmt);
+    const nativeLabel = hasNative
+      ? `${nativeCurr} ${nativeAmt.toFixed(2)}`
+      : null;
+    const nativeInInvoiceCurrency =
+      hasNative &&
+      String(nativeCurr).trim().toUpperCase() ===
+        String(currencyCode).toUpperCase();
+    const nativeMismatch =
+      hasNet &&
+      nativeInInvoiceCurrency &&
+      Math.abs(nativeAmt - netDisplay) > Math.max(0.01, netDisplay * 0.05);
+    const showNativeNote =
+      hasNet && hasNative && (!nativeInInvoiceCurrency || nativeMismatch);
+    const note = showNativeNote ? (
+      <span
+        style={{
+          marginLeft: 6,
+          fontSize: "0.72rem",
+          color: nativeMismatch ? "#dc3545" : "#888",
+          fontWeight: nativeMismatch ? 600 : 400,
+        }}
+        title={
+          nativeMismatch
+            ? `The supplier confirmed ${nativeLabel}, which doesn't match our net cost of ${currencyCode} ${netDisplay.toFixed(2)}. The supplier's currency was probably saved wrongly (e.g. USD saved as AED) — check the supplier statement.`
+            : "Amount the supplier confirmed, in its own currency."
+        }
+      >
+        (supplier: {nativeLabel}
+        {nativeMismatch ? " — check currency" : ""})
+      </span>
+    ) : null;
+    return {
+      netAmt: hasNet ? netAmt : null,
+      text: hasNet ? `${currencyCode} ${netDisplay.toFixed(2)}` : nativeLabel,
+      note,
+    };
+  })();
+
   // Booking lifecycle events for the History modal. Only events that have
   // actually occurred are included — each row is gated on its timestamp being
   // present, so e.g. a booking that was never reconfirmed/cancelled simply
@@ -1796,40 +1864,80 @@ export default function BookingDetailedView() {
                           />
                         )}
                         {/* Payable to Supplier — what our company owes
-                            the supplier for this booking. Admin/super-admin
-                            only: mirrors the same whitelabel rule as the
-                            Supplier Name row above. Prefers the supplier's
-                            native amount+currency when available (e.g. X3
-                            confirms in USD while we sell in AED); falls
-                            back to the booking total in the display
-                            currency when the supplier didn't return a
-                            distinct native amount. Hidden entirely when no
-                            amount is known so we never render a "-" that
-                            could imply zero cost. */}
+                            the supplier for this booking (see
+                            supplierPayable above). Admin/super-admin only:
+                            mirrors the same whitelabel rule as the Supplier
+                            Name row above. Hidden entirely when no amount is
+                            known so we never render a "-" that could imply
+                            zero cost. */}
+                        {(isAdmin || isSuperAdmin) && supplierPayable.text && (
+                          <InfoRow
+                            label="Payable to Supplier"
+                            value={
+                              <span>
+                                {supplierPayable.text}
+                                {supplierPayable.note}
+                              </span>
+                            }
+                          />
+                        )}
+                        {/* Invoice Amount + Markup Adjusted — the client's
+                            "one more line below" Payable to Supplier, so the
+                            back-office team can check the supplier payable
+                            rate, the invoice amount and the markup against
+                            each other (e.g. Payable AED 1.03, Invoice Amount
+                            AED 1.08, Markup Adjusted 5%). Same admin-only
+                            rule as the rows above; the backend also strips
+                            these figures for agent logins.
+                              • Invoice Amount — the selling total the invoice
+                                bills (markupBreakdown.invoiceAmount, else
+                                totalRate; VAT is carved out of it, not added
+                                on top). A cancelled booking may be invoiced
+                                less, so the row says "before cancellation".
+                              • Markup Adjusted — the booking agent's markup
+                                setting (markupBreakdown.markupType / Value):
+                                every supplier, in-house and API, prices a
+                                room as its net rate plus the agent's markup.
+                                "5%" for a percentage markup, the amount for
+                                a fixed one, "0%" when the agent has none,
+                                "-" when the backend did not send it. */}
                         {(isAdmin || isSuperAdmin) &&
                           (() => {
-                            const nativeCurr = booking.supplierNativeCurrency;
-                            const nativeAmt = Number(
-                              booking.supplierNativeAmount,
+                            const mb = booking.markupBreakdown || null;
+                            const invoiceAmt = Number(
+                              mb?.invoiceAmount ?? booking.totalRate,
                             );
-                            const hasNative =
-                              !!nativeCurr &&
-                              Number.isFinite(nativeAmt) &&
-                              nativeAmt > 0;
-                            const fallbackAmt = Number(booking.totalRate);
-                            const hasFallback =
-                              Number.isFinite(fallbackAmt) && fallbackAmt > 0;
-                            if (!hasNative && !hasFallback) return null;
-                            const value = hasNative
-                              ? `${nativeCurr} ${nativeAmt.toFixed(2)}`
-                              : `${currencyCode} ${toDisplayAmount(
-                                  fallbackAmt,
-                                ).toFixed(2)}`;
+                            const hasInvoice =
+                              Number.isFinite(invoiceAmt) && invoiceAmt > 0;
+                            const markupValue = Number(mb?.markupValue);
+                            let markupLabel = "-";
+                            if (mb && !mb.markupConfigured) {
+                              markupLabel = "0%";
+                            } else if (mb && Number.isFinite(markupValue)) {
+                              markupLabel =
+                                String(mb.markupType).toUpperCase() === "AMOUNT"
+                                  ? `${currencyCode} ${toDisplayAmount(
+                                      markupValue,
+                                    ).toFixed(2)}`
+                                  : `${Number(markupValue.toFixed(2))}%`;
+                            }
                             return (
-                              <InfoRow
-                                label="Payable to Supplier"
-                                value={value}
-                              />
+                              <>
+                                {hasInvoice && (
+                                  <InfoRow
+                                    label="Invoice Amount"
+                                    value={`${currencyCode} ${toDisplayAmount(
+                                      invoiceAmt,
+                                    ).toFixed(2)}${
+                                      isCancelled ? " (before cancellation)" : ""
+                                    }`}
+                                  />
+                                )}
+                                <InfoRow
+                                  label="Markup Adjusted"
+                                  value={markupLabel}
+                                />
+                              </>
                             );
                           })()}
                         {/* Contact — "Booking done for" value entered on the
@@ -1865,24 +1973,30 @@ export default function BookingDetailedView() {
                             once entered (blank shows "-"). */}
                         <InfoRow
                           label="Agent Reference"
-                          value={booking.customer?.agentLpo}
+                          // `|| "-"`: an empty saved value ("") would
+                          // otherwise render as a blank cell, unlike the
+                          // "-" every other empty row shows.
+                          value={booking.customer?.agentLpo || "-"}
                         />
-                        {/* Confirmation number row. For admin / super-admin
-                            this is the "Hotel Confirmation Number" — the
-                            actual reference the hotel/supplier returned, so
-                            it's relabeled to make that scope explicit.
-                            Agents keep the neutral "Confirmation No." label
-                            they've always seen: it's the same field they
-                            use as their customer-facing reference and does
-                            not by itself name the supplier, so no
-                            supplier-identifying information is exposed by
-                            the label change. */}
+                        {/* Hotel Confirmation No. — the hotel's own
+                            reservation number, the one the guest quotes at
+                            check-in. Same label for every login (admin and
+                            agent alike): agents need it for their guests,
+                            and it doesn't name the supplier.
+                            The value is only ever the number saved with the
+                            "CONFIRMATION NO." button (HotelCustomer
+                            .confirmationNumber — the same row the save
+                            writes). It never falls back to the supplier's
+                            booking reference (supplierReference: GRN bref,
+                            IWTX/X3 BookingNumber, Jumeirah confirmation_code,
+                            …): that is the supplier's number, not the
+                            hotel's, and it stays admin-only in the rooms
+                            table's "Supplier Ref." column. Shows "-" until
+                            the hotel's number is entered.
+                            "Hotel Confirmation No." rather than "…Number" so
+                            the label fits the 160px label column. */}
                         <InfoRow
-                          label={
-                            isAdmin || isSuperAdmin
-                              ? "Hotel Confirmation Number"
-                              : "Confirmation No."
-                          }
+                          label="Hotel Confirmation No."
                           value={
                             booking.confirmationNumber ||
                             booking.customer?.confirmationNumber
@@ -2850,7 +2964,7 @@ export default function BookingDetailedView() {
                         onClick={() => {
                           if (!cancelledFromConfirmedOrLater) {
                             toast.error(
-                              "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed.",
+                              "Hotel Confirmation Number can only be added once the booking is Confirmed or ReConfirmed.",
                             );
                             return;
                           }
@@ -3045,7 +3159,7 @@ export default function BookingDetailedView() {
                         onClick={() => {
                           if (!isConfirmedOrLater || isOnRequestPending) {
                             toast.error(
-                              "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed.",
+                              "Hotel Confirmation Number can only be added once the booking is Confirmed or ReConfirmed.",
                             );
                             return;
                           }
@@ -4028,7 +4142,7 @@ export default function BookingDetailedView() {
                     }}
                   >
                     <Modal.Title className="fw-bold">
-                      Confirmation Number
+                      Hotel Confirmation Number
                     </Modal.Title>
                   </Modal.Header>
                   <Modal.Body style={{ padding: "1.5rem" }}>
@@ -4045,7 +4159,7 @@ export default function BookingDetailedView() {
                     </div>
                     <Form.Group controlId="confirmationNoInput">
                       <Form.Label className="fw-semibold mb-1">
-                        Confirmation Number{" "}
+                        Hotel Confirmation Number{" "}
                         <span className="text-danger">*</span>
                       </Form.Label>
                       <Form.Control
