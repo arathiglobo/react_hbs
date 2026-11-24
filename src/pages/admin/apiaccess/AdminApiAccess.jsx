@@ -19,6 +19,7 @@ import BackButton from "../../../components/BackButton";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import { FaKey, FaEye, FaEyeSlash } from "react-icons/fa";
+import { apiDisplayName as apiDisplayNameFor } from "../../../utils/apiDisplayName";
 
 /**
  * Admin-side API access screen. Shows the APIs super_admin has enabled
@@ -112,6 +113,14 @@ const CREDENTIAL_SCHEMAS = {
     { key: "user", label: "User (goglobal.api.user)", type: "text" },
     { key: "password", label: "Password (goglobal.api.password)", type: "password" },
   ],
+  // ATHARVA_V2 — Atharva XConnect Hotel Service API, separate from ATHARVA.
+  // Base URL without the /hotel path (e.g. http://test.services.xconnect.in);
+  // username / password go in the UserName / Password request headers.
+  ATHARVA_V2: [
+    { key: "baseUrl", label: "Base URL (atharvav2.api.base-url)", type: "text" },
+    { key: "username", label: "Username (atharvav2.api.username)", type: "text" },
+    { key: "password", label: "Password (atharvav2.api.password)", type: "password" },
+  ],
 
   // IWay (i'way BS Transfers). Keys map to IwayAuthService.pick* on the
   // backend — same DB-first-with-properties-fallback pattern as ATHARVA
@@ -135,6 +144,9 @@ const CREDENTIAL_SCHEMAS = {
 };
 
 const MASK = "••••••••";
+
+// Supplier name for this page (display-only overrides in utils/apiDisplayName).
+const apiDisplayName = (row) => apiDisplayNameFor(row?.apiCode, row?.apiName);
 
 export default function AdminApiAccess() {
   const [rows, setRows] = useState([]);
@@ -171,7 +183,7 @@ export default function AdminApiAccess() {
         enabled: nextEnabled,
       });
       toast.success(
-        `${row.apiName || row.apiCode} ${nextEnabled ? "enabled" : "disabled"}`,
+        `${apiDisplayName(row)} ${nextEnabled ? "enabled" : "disabled"}`,
       );
       await fetchRows();
     } catch (e) {
@@ -300,7 +312,7 @@ export default function AdminApiAccess() {
                     <tr key={row.externalApiId}>
                       <td className="text-muted" style={{ textAlign: "center" }}>{idx + 1}</td>
                       <td>
-                        <div className="adm-aa-api-name">{row.apiName || row.apiCode}</div>
+                        <div className="adm-aa-api-name">{apiDisplayName(row)}</div>
                         <span className="adm-aa-api-code">{row.apiCode}</span>
                       </td>
                       <td>
@@ -533,7 +545,7 @@ function CredentialsModal({ row, initialEnv, onClose, onSaved }) {
     }
     if (willBeEmpty && existing[env]) {
       const proceed = window.confirm(
-        `This clears the saved ${env} credentials for ${row.apiName || row.apiCode}. Continue?`,
+        `This clears the saved ${env} credentials for ${apiDisplayName(row)}. Continue?`,
       );
       if (!proceed) return;
     }
@@ -572,7 +584,7 @@ function CredentialsModal({ row, initialEnv, onClose, onSaved }) {
     <Modal show onHide={onClose} size="lg" centered backdrop="static">
       <Modal.Header closeButton>
         <Modal.Title>
-          Credentials — {row.apiName || row.apiCode}
+          Credentials — {apiDisplayName(row)}
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>

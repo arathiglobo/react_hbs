@@ -397,3 +397,50 @@
 .d-flex.flex-column.gap-3 {
   gap: 0.5rem !important;
 }
+
+/* ─── Guest picker: a child's name beside its age ───
+   Same look as the age dropdown (.rgs-age-dropdown in HotelSearch.css). */
+.offline-child-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.offline-child-name.form-control {
+  width: 170px;
+  border-radius: 8px;
+  border: 1.5px solid #e2e8f0;
+  font-size: 0.82rem;
+  color: #374151;
+  padding: 4px 8px;
+}
+
+.offline-child-name.form-control:focus {
+  border-color: #F75E00;
+  box-shadow: 0 0 0 3px rgba(247, 94, 0, 0.12);
+  outline: none;
+}
+
+/* ─── Activity: Travellers picker (adults + children) ───
+   Opens under the Travellers button; counters look like the Search Guest picker's. */
+.offline-traveller-panel {
+  margin-top: 6px;
+  padding: 8px 12px;
+  border: 1px solid #edf2f7;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.offline-traveller-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+.offline-traveller-stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}

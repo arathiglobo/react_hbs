@@ -10,7 +10,12 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
+import { compactFilters, emailSentMessage, emailErrorMessage } from "../../utils/reportEmail";
 
+
+// Case- and whitespace-insensitive name comparison
+const sameName = (a, b) =>
+  String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 
 function Comparison() {
   
@@ -59,39 +64,25 @@ function Comparison() {
     };fetchHotels();
   },[])
 
-  const fetchcomparison = async ( fromDate = null,toDate = null ) => {
+  // Agent search -> one row per agent, Hotel search -> one row per hotel.
+  // Returns false when the request failed.
+  const fetchcomparison = async (type, fromDate = null, toDate = null) => {
     try{
       const params = {};
       if(fromDate && toDate){
         params.fromDate = fromDate;
         params.toDate = toDate;
       }
-      const response =await axiosInstance.get(
-        "/api/reports/hotel-summary",
-        {params}
-      );
-      setComparison(response.data || []);
+      const url = type === "agent" ? "/api/reports/agent-summary" : "/api/reports/hotel-summary";
+      const response = await axiosInstance.get(url, {params});
+      setComparison(Array.isArray(response.data) ? response.data : []);
+      return true;
     }catch(error){
       console.error("Error while fetching data",error)
-      toast.error("failed to load data")
+      toast.error("Failed to load comparison data")
+      return false;
     }
   }
-
-  useEffect(()=>{
-    fetchcomparison();
-  },[]);
-
-  // useEffect(()=>{
-  //   const fetchcomparison = async ()=>{
-  //     try{
-  //       const response = await axiosInstance.get("/api/reports/hotel-summary")
-  //       setComparison(response.data || [])
-  //     }catch(error){
-  //       console.error("Error while fetching data",error)
-  //       toast.error("Failed to load data");
-  //     }
-  //   };fetchcomparison();
-  // },[])
 
   // Reset "Compare With" section when switching between Agent and Hotel
  
@@ -108,18 +99,22 @@ function Comparison() {
   // Options for Agent/Hotel dropdown
   const agentOptions = useMemo(() => {
     if (!agentsList || !Array.isArray(agentsList)) return [];
-    return agentsList
-      .map(agent => agent.companyName || agent.agentName || agent.name || '')
-      .filter(Boolean)
-      .sort();
+    // Same naming as the report rows: company name, else first + last name
+    return [...new Set(agentsList
+      .map(agent => String(
+        agent.companyName?.trim() || agent.agentName || agent.name ||
+        [agent.firstName, agent.lastName].filter(Boolean).join(" ")
+      ).trim())
+      .filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
   }, [agentsList]);
 
   const hotelOptions = useMemo(() => {
     if (!hotelsList || !Array.isArray(hotelsList)) return [];
-    return hotelsList
-      .map(hotel => hotel.hotelName || hotel.name || '')
-      .filter(Boolean)
-      .sort();
+    return [...new Set(hotelsList
+      .map(hotel => String(hotel.hotelName || hotel.name || '').trim())
+      .filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
   }, [hotelsList]);
 
   // Extract agent booking data from comparison API response
@@ -184,18 +179,22 @@ function Comparison() {
     return [];
   }, [selectedOption, selectedAgentHotel, agentOptions, hotelOptions]);
 
-  // Data for other entities (for "Other" comparison)
-  const otherEntitiesData = useMemo(() => {
-    const data = {};
-    otherOptions.forEach(option => {
-      if (selectedOption === "agent") {
-        data[option] = agentData.filter(item => item.agentname === option);
-      } else if (selectedOption === "hotel") {
-        data[option] = hotelData.filter(item => item.agentname === option);
-      }
-    });
-    return data;
-  }, [otherOptions, selectedOption, agentData, hotelData]);
+  // Rows shown in the table and in Print / PDF / Excel: the selected
+  // agent/hotel, then the one it is compared with. The server already applied
+  // the date range. A name without bookings still gets a row with zeros.
+  const resultRows = useMemo(() => {
+    const data = reportType === "agent" ? agentData : hotelData;
+    const rowsFor = (name) => {
+      const found = data.filter(item => sameName(item.agentname, name));
+      return found.length > 0 ? found : [{ agentname: name, noofbooking: 0, cancelledbooking: 0 }];
+    };
+    if (!selectedAgentHotel) return [];
+    const rows = rowsFor(selectedAgentHotel);
+    if (compareOption === "other" && selectedOtherEntity) {
+      rows.push(...rowsFor(selectedOtherEntity));
+    }
+    return rows;
+  }, [reportType, agentData, hotelData, selectedAgentHotel, compareOption, selectedOtherEntity]);
 
   const handleSendEmail = async () => {
     if (!emailAddress || !emailAddress.includes('@')) {
@@ -205,27 +204,29 @@ function Comparison() {
   
     setIsSending(true);
     try {
+      // The rows on screen: the searched Agent / Hotel summary for the selected
+      // name, and either the one compared with or the date range
       const response = await axiosInstance.post('/api/reports/send-email', {
-        email: emailAddress,
-        reportType: 'Comparison',
-        subType: reportType, 
-        filters: {
-          selectedOption: selectedOption,
-          selectedAgentHotel: selectedAgentHotel,
-          compareOption: compareOption,
-          selectedOtherEntity: selectedOtherEntity,
-          fromDate: selectedFromDate,
-          toDate: selectedToDate,
-        }
+        email: emailAddress.trim(),
+        reportType: 'comparison',
+        subType: reportType || selectedOption, // 'agent' or 'hotel'
+        filters: compactFilters({
+          selectedOption,
+          selectedAgentHotel,
+          compareOption,
+          selectedOtherEntity: compareOption === "other" ? selectedOtherEntity : undefined,
+          fromDate: compareOption === "date" ? selectedFromDate : undefined,
+          toDate: compareOption === "date" ? selectedToDate : undefined,
+        }),
       });
-  
+
       if (response.data) {
-        toast.success("Report sent successfully!");
+        toast.success(emailSentMessage(response.data));
         setShowMailModal(false);
         setEmailAddress("");
       }
     } catch (error) {
-      toast.error("Failed to send email");
+      toast.error(emailErrorMessage(error));
     } finally {
       setIsSending(false);
     }
@@ -233,22 +234,7 @@ function Comparison() {
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
-    const primaryData = (reportType === 'agent' ? agentData : hotelData)
-      .filter(item => item.agentname === selectedAgentHotel)
-      .filter(item => {
-        if (!selectedFromDate || !selectedToDate) return true;
-        const itemFromDate = new Date(item.fromDate);
-        const itemToDate = new Date(item.toDate);
-        const selectedFrom = new Date(selectedFromDate);
-        const selectedTo = new Date(selectedToDate);
-        return itemFromDate <= selectedTo && itemToDate >= selectedFrom;
-      });
-    
-   
-    const otherData = compareOption === "other" && selectedOtherEntity 
-      ? otherEntitiesData[selectedOtherEntity] || []
-      : [];
-    const allData = [...primaryData, ...otherData];
+    const allData = resultRows;
   const columns = ['Sl.No', 'Entity Name', 'No Of Booking', 'Cancelled Booking'];
     
     printWindow.document.write(`
@@ -291,24 +277,7 @@ function Comparison() {
   
   const handlePDF = () => {
     const doc = new jsPDF();
-    
-    const primaryData = (reportType === 'agent' ? agentData : hotelData)
-      .filter(item => item.agentname === selectedAgentHotel) 
-      .filter(item => {
-        if (!selectedFromDate || !selectedToDate) return true;
-        const itemFromDate = new Date(item.fromDate);
-        const itemToDate = new Date(item.toDate);
-        const selectedFrom = new Date(selectedFromDate);
-        const selectedTo = new Date(selectedToDate);
-        return itemFromDate <= selectedTo && itemToDate >= selectedFrom;
-      });
-    
-    const otherData = compareOption === "other" && selectedOtherEntity 
-      ? otherEntitiesData[selectedOtherEntity] || []
-      : [];
-    
-  
-    const allData = [...primaryData, ...otherData];
+    const allData = resultRows;
     
     doc.text(`Comparison Report - ${reportType === 'agent' ? 'Agent' : 'Hotel'}`, 20, 20);
     
@@ -327,23 +296,7 @@ function Comparison() {
   };
   
   const handleExcel = () => {
-    
-    const primaryData = (reportType === 'agent' ? agentData : hotelData)
-      .filter(item => item.agentname === selectedAgentHotel) 
-      .filter(item => {
-        if (!selectedFromDate || !selectedToDate) return true;
-        const itemFromDate = new Date(item.fromDate);
-        const itemToDate = new Date(item.toDate);
-        const selectedFrom = new Date(selectedFromDate);
-        const selectedTo = new Date(selectedToDate);
-        return itemFromDate <= selectedTo && itemToDate >= selectedFrom;
-      });
-    
-    const otherData = compareOption === "other" && selectedOtherEntity 
-      ? otherEntitiesData[selectedOtherEntity] || []
-      : [];
-    
-    const allData = [...primaryData, ...otherData];
+    const allData = resultRows;
     
     const headers = ['Sl.No', 'Entity Name', 'No Of Booking', 'Cancelled Booking'];
     
@@ -522,10 +475,9 @@ function Comparison() {
                               }}
                             >
                               {(() => {
-                                // Get all available options (not filtered)
-                                const allOptions = selectedOption === "agent" ? agentOptions : hotelOptions;
-                                const availableOptions = allOptions.filter(opt => opt && opt.trim() !== '');
-                                
+                                // Everything except the agent/hotel already selected
+                                const availableOptions = otherOptions;
+
                                 if (availableOptions.length === 0) {
                                   return (
                                     <Dropdown.Item disabled className="text-muted">
@@ -605,19 +557,19 @@ function Comparison() {
                           alert("Please select date range");
                           return;
                         }
+                        if (compareOption === "date" && selectedFromDate > selectedToDate) {
+                          alert("From Date must be on or before To Date");
+                          return;
+                        }
                         if (compareOption === "other" && !selectedOtherEntity) {
                           alert("Please select comparison entity");
                           return;
                         }
-                        // Set report type and show results
+                        const ok = compareOption === "date"
+                          ? await fetchcomparison(selectedOption, selectedFromDate, selectedToDate)
+                          : await fetchcomparison(selectedOption);
                         setReportType(selectedOption);
-                        
-                        if (compareOption === "date" && selectedFromDate && selectedToDate) {
-                          await fetchcomparison(selectedFromDate,selectedToDate);
-                        }else{
-                              await fetchcomparison();
-                             }
-                        setShowResults(true);
+                        setShowResults(ok);
                       }}
                     >
                       <i className="fas fa-search me-1"></i>Search
@@ -633,6 +585,16 @@ function Comparison() {
                 {/* Action Buttons */}
                 <div className="p-3 border-bottom">
                   <Row>
+                    {/* <Col md="auto">
+                      <input
+                        type="text"
+                        style={{background: 'white'}}
+                        value={searchQuery}
+                        onChange={(e)=>setSearchQuery(e.target.value)}
+                        placeholder="search here"
+                        className="form-control form-control-sm w-auto"
+                      />
+                    </Col> */}
                     <Col className="d-flex justify-content-end gap-2">
                       <Button variant="outline-primary" size="sm" onClick={() => setShowMailModal(true)}>
                         <i className="fas fa-envelope me-1"></i>Mail
@@ -663,15 +625,7 @@ function Comparison() {
                       </Form.Select>
                       <span className="text-muted ms-2">records</span>
                     </Col>
-                    <Col md="auto">
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e)=>setSearchQuery(e.target.value)}
-                        placeholder="search here"
-                        className="form-control form-control-sm w-auto"
-                      />
-                    </Col>
+                    
                   </Row>
                 </div>
 
@@ -680,43 +634,20 @@ function Comparison() {
                   <thead>
                     <tr>
                       <th style={{ width: 100 }}>S/N</th>
-                      <th>Agent Name</th>
+                      <th>{reportType === 'agent' ? 'Agent Name' : 'Hotel Name'}</th>
                       <th>No.Of Booking</th>
                       <th>Cancelled Booking</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Show primary entity data */}
-                    {(reportType === 'agent' ? agentData : hotelData)
-                      .filter(item => item.agentname === selectedAgentHotel)
-                      .filter(item => {
-                        if (!selectedFromDate || !selectedToDate) return true;
-                        const itemFromDate = new Date(item.fromDate);
-                        const itemToDate = new Date(item.toDate);
-                        const selectedFrom = new Date(selectedFromDate);
-                        const selectedTo = new Date(selectedToDate);
-                        return itemFromDate <= selectedTo && itemToDate >= selectedFrom;
-                      })
-                      .map((item, index) => (
-                        <tr key={`primary-${item.slNo}`}>
-                          <td>{index + 1}</td>
-                          <td>{item.agentname}</td>
-                          <td>{item.noofbooking}</td>
-                          <td>{item.cancelledbooking}</td>
-                        </tr>
-                      ))}
-                    
-                    {/* Show other entity data in the same table */}
-                    {compareOption === "other" && selectedOtherEntity && 
-                      otherEntitiesData[selectedOtherEntity]?.map((item, index) => (
-                        <tr key={`other-${item.slNo}`}>
-                          <td>{(reportType === 'agent' ? agentData : hotelData).filter(item => item.agentname === selectedAgentHotel).length + index + 1}</td>
-                          <td>{item.agentname}</td>
-                          <td>{item.noofbooking}</td>
-                          <td>{item.cancelledbooking}</td>
-                        </tr>
-                      ))
-                    }
+                    {resultRows.map((item, index) => (
+                      <tr key={`${index}-${item.agentname}`}>
+                        <td>{index + 1}</td>
+                        <td>{item.agentname}</td>
+                        <td>{item.noofbooking}</td>
+                        <td>{item.cancelledbooking}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </Table>
               </Card.Body>

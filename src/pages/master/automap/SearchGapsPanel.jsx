@@ -9,7 +9,7 @@ const BASE = "/api/cityMapping/review/search-gaps";
 
 const PERIODS = [7, 30, 90, 365];
 
-const SUPPLIERS = ["grn", "goglobal", "iwtx", "x3", "atharva", "darina", "ratehawk", "inhouse", "all"];
+const SUPPLIERS = ["grn", "goglobal", "iwtx", "x3", "atharva", "atharva_v2", "darina", "ratehawk", "inhouse", "all"];
 
 /** Most urgent first. HOTELS_RETURNED has no entry: it only gives the total to compare against. */
 export const GAP_OUTCOMES = {
@@ -45,7 +45,9 @@ export const GAP_OUTCOMES = {
 
 const errorText = (err, fallback) => err?.response?.data?.error || fallback;
 
-const supplierLabel = (s) => (s === "all" ? "All suppliers" : String(s || "").toUpperCase());
+// ATHARVA_V2 is shown as ATHARVA_V2_API, like everywhere else in the app.
+const supplierLabel = (s) =>
+  s === "all" ? "All suppliers" : s === "atharva_v2" ? "ATHARVA_V2_API" : String(s || "").toUpperCase();
 
 /**
  * What hotel searches failed to find, most searched first. Which hotels come back

@@ -29,7 +29,7 @@ import {
   Col,
   Button,
 } from "react-bootstrap";
-import { FaSearch, FaEye, FaInbox, FaArrowLeft } from "react-icons/fa";
+import { FaSearch, FaEye, FaInbox, FaArrowLeft, FaUser } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -46,31 +46,22 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-// Column-width hints kept in sync with HotelBookingList so the two pages
-// line up visually under the shared hbl-modern skin.
+// Columns of the hotel booking list (HotelBookingList.jsx), same order and
+// width hints, so the two pages read alike under the shared hbl-modern skin.
 const COLUMN_WIDTHS = {
   sn: "40px",
-  bookDate: "95px",
-  invoice: "110px",
-  agent: "120px",
-  paxName: "130px",
-  pax: "70px",
-  hotel: "140px",
-  booker: "100px",
-  checkIn: "95px",
-  checkOut: "95px",
-  noOfRooms: "110px",
-  total: "100px",
-  status: "105px",
-  action: "60px",
-};
-
-const STATUS_META = {
-  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  UPCOMING:  { label: "Upcoming",  bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  agentName: "90px",
+  customerName: "120px",
+  bookingCode: "95px",
+  confirmationNo: "130px",
+  bookDate: "90px",
+  bookingDetails: "210px",
+  noOfRooms: "120px",
+  deadlineDate: "105px",
+  paymentMode: "110px",
+  paymentStatus: "115px",
+  notification: "120px",
+  action: "110px",
 };
 
 // Reads the leading "yyyy-MM-dd" as a LOCAL calendar date. `new Date("2026-11-20")`
@@ -83,73 +74,117 @@ const parseLocalDate = (value) => {
   return isNaN(d) ? null : d;
 };
 
+// "20/11/2026" — the hotel list's date format; "" when there is no date.
 const fmtDate = (value) => {
   const d = parseLocalDate(value);
-  if (!d) return "-";
-  return d.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  if (!d) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}/${d.getFullYear()}`;
 };
 
-// "1 adult" / "2 adults, 1 child" under the pax count.
-const fmtPaxBreakdown = (b) => {
-  const adult = Number(b?.adult) || 0;
-  const child = Number(b?.child) || 0;
-  const parts = [];
-  if (adult) parts.push(`${adult} adult${adult === 1 ? "" : "s"}`);
-  if (child) parts.push(`${child} ${child === 1 ? "child" : "children"}`);
-  return parts.join(", ");
+// Deadline Date: "2026-11-26 17:39" (UAE time). An offline deadline is exact
+// to the minute, so its time is kept next to the hotel list's ISO date.
+const fmtDeadline = (value) => {
+  if (!value) return "-";
+  const s = String(value).replace("T", " ");
+  return s.length >= 16 ? s.slice(0, 16) : s.slice(0, 10);
 };
 
-// Grand total with its currency; "-" when the booking has no total yet.
-const fmtTotal = (b) => {
-  const raw = b?.totalAmount ?? b?.grandTotal;
-  if (raw == null || raw === "") return null;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return null;
-  const amount = n.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return b?.currency ? `${b.currency} ${amount}` : amount;
+// Payment Mode — offline bookings are paid from the agent's credit limit
+// (debited when our team confirms them). Bookings made before that rule
+// (no cancellation deadline) never used it.
+const offlinePaymentMode = (b) => (b?.cancellationDeadline ? "Credit Limit Payment" : "-");
+
+// Payment Status — the hotel list's labels, from what the agent's credit
+// paid: On Request → Payment Pending (debited when confirmed); confirmed and
+// debited → Paid; cancelled → Paid when the debit was kept (after the
+// deadline), Refunded when it went back (before the deadline), Un-Paid when
+// it was never debited. A confirmed booking from before the rule took no
+// credit and shows "-".
+const offlinePaymentStatus = (b, statusKey) => {
+  const debited = Number(b?.agentCreditDebited) > 0;
+  const refunded = Number(b?.agentCreditRefunded) > 0;
+  if (statusKey === "ON_REQUEST") return "Payment Pending";
+  if (statusKey === "CANCELLED") {
+    if (!debited) return "Un-Paid";
+    return refunded ? "Refunded" : "Paid";
+  }
+  return debited ? "Paid" : "-";
 };
 
-const StatusPill = ({ meta, raw }) => {
-  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
+const PAYMENT_STATUS_COLOR = {
+  Paid: "#06a301",
+  "Un-Paid": "#dc3545",
+  "Payment Pending": "#e67e22",
+  Refunded: "#6c757d",
+};
+
+// Status column — the same words and look as the hotel Booking List's status
+// column (HotelBookingList.jsx): plain coloured text, no pill.
+//   On Request → orange · Confirmed → green · Cancelled → red · other → grey
+// A past booking still reads "Confirmed", as on the hotel list (the Completed
+// filter is where past bookings are picked out).
+const STATUS_TEXT_STYLE = {
+  padding: "0.32rem 0.6rem",
+  fontSize: "0.82rem",
+  fontWeight: "600",
+  borderRadius: "0.375rem",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.35rem",
+};
+
+// Each "/"-separated part coloured on its own, as on the hotel list.
+const statusSegColor = (part) => {
+  const p = (part || "").trim().replace(/\s+/g, "").toLowerCase();
+  if (p.startsWith("reconfirmed")) return "#06a301";
+  if (p.startsWith("confirmed")) return "#06a301";
+  if (p.startsWith("cancelled")) return "#dc3545";
+  if (p === "onrequest") return "#ff9800";
+  return "#6c757d";
+};
+
+const renderColoredStatus = (text) =>
+  String(text ?? "-")
+    .split("/")
+    .map((part, i) => (
+      <React.Fragment key={i}>
+        {i > 0 && <span style={{ color: "#6c757d" }}>/</span>}
+        <span style={{ color: statusSegColor(part) }}>{part}</span>
+      </React.Fragment>
+    ));
+
+const StatusText = ({ statusKey, raw }) => {
+  if (statusKey === "ON_REQUEST") {
+    return <span style={{ ...STATUS_TEXT_STYLE, color: "#e67e22" }}>On Request</span>;
+  }
+  if (statusKey === "CONFIRMED" || statusKey === "COMPLETED") {
+    return <span style={{ ...STATUS_TEXT_STYLE, color: "#06a301" }}>Confirmed</span>;
+  }
+  // Cancelled and anything else: the hotel list's smaller per-part colouring.
+  const label = statusKey === "CANCELLED" ? "Cancelled" : raw || "-";
   return (
-    <span
-      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
+    <div
+      className="d-inline-flex align-items-center justify-content-center gap-2"
       style={{
-        backgroundColor: meta.bg,
-        color: meta.color,
-        fontSize: "0.7rem",
-        fontWeight: 600,
-        lineHeight: 1,
-        whiteSpace: "nowrap",
+        padding: "0.32rem 0.6rem",
+        borderRadius: "0.375rem",
+        backgroundColor: "transparent",
+        color: "#6c757d",
+        fontSize: "0.72rem",
+        fontWeight: "600",
       }}
     >
-      {meta.dot && (
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            backgroundColor: meta.dot,
-            display: "inline-block",
-          }}
-        />
-      )}
-      {meta.label}
-    </span>
+      {renderColoredStatus(label)}
+    </div>
   );
 };
 
 const normStatus = (v) =>
   String(v ?? "").replace(/[\s_-]+/g, "").toLowerCase();
 
-// Derive a STATUS_META key for the pill. The list API sends `bookingStatus`
+// Derive the status key for the Status column. The list API sends `bookingStatus`
 // (Confirmed / Completed / Cancelled — the same rule as the All Bookings
 // list); the check-out fallback only covers an older backend.
 const deriveStatusKey = (b) => {
@@ -157,7 +192,8 @@ const deriveStatusKey = (b) => {
   if (raw === "cancelled" || b?.cancelStatus === true) return "CANCELLED";
   if (raw === "confirmed") return "CONFIRMED";
   if (raw === "completed") return "COMPLETED";
-  if (raw === "pending" || raw === "onrequest") return "PENDING";
+  if (b?.statusCode === "ON_REQUEST" || raw === "onrequest") return "ON_REQUEST";
+  if (raw === "pending") return "PENDING";
   const co = parseLocalDate(b?.checkOut);
   if (co) {
     const today = new Date();
@@ -252,17 +288,19 @@ const OfflineBookingList = () => {
 
     try {
       setLoading(true);
-      // Only the original three statuses (upcoming/completed/cancelled)
-      // are recognised by the backend — the remaining three are filtered
-      // client-side from a status-less response.
-      const serverStatuses = new Set(["upcoming", "completed", "cancelled"]);
+      // Statuses the backend filters (and pages) itself; the remaining two
+      // are filtered client-side from a status-less response.
+      const serverStatuses = {
+        upcoming: "UPCOMING",
+        completed: "COMPLETED",
+        cancelled: "CANCELLED",
+        onrequest: "ON_REQUEST",
+      };
       const params = {
         page: page - 1,
         limit: perPage,
         search: search.trim() || undefined,
-        status: serverStatuses.has(bookingType)
-          ? bookingType.toUpperCase()
-          : undefined,
+        status: serverStatuses[bookingType],
         month: selectedMonth || undefined,
         year: selectedYear || undefined,
       };
@@ -318,7 +356,8 @@ const OfflineBookingList = () => {
       bookingType === "all" ||
       bookingType === "upcoming" ||
       bookingType === "completed" ||
-      bookingType === "cancelled"
+      bookingType === "cancelled" ||
+      bookingType === "onrequest"
     ) {
       return bookings;
     }
@@ -368,7 +407,7 @@ const OfflineBookingList = () => {
     lineHeight: 1.2,
   };
 
-  const colCount = isAdmin ? 14 : 13;
+  const colCount = isAdmin ? 13 : 12;
   const safeTotalPages = Math.max(1, totalPages || 1);
   const hasResults = visibleBookings.length > 0;
   const displayStart = hasResults ? (page - 1) * perPage + 1 : 0;
@@ -565,128 +604,47 @@ const OfflineBookingList = () => {
                           letterSpacing: "0.03em",
                         }}
                       >
+                        {/* The hotel booking list's columns, in its order. */}
                         <tr>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              textAlign: "center",
-                              width: COLUMN_WIDTHS.sn,
-                            }}
-                          >
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.sn }}>
                             S.N
                           </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              textAlign: "center",
-                              width: COLUMN_WIDTHS.bookDate,
-                            }}
-                          >
-                            Booking Date
-                          </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.invoice,
-                            }}
-                          >
-                            Invoice
-                          </th>
                           {isAdmin && (
-                            <th
-                              style={{
-                                ...baseHeaderStyle,
-                                width: COLUMN_WIDTHS.agent,
-                              }}
-                            >
-                              Agent
+                            <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.agentName }}>
+                              Agent Name
                             </th>
                           )}
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.paxName,
-                            }}
-                          >
-                            Pax Name
+                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.customerName }}>
+                            Customer Name
                           </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              textAlign: "center",
-                              width: COLUMN_WIDTHS.pax,
-                            }}
-                          >
-                            Pax
+                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingCode }}>
+                            Booking Code
                           </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.hotel,
-                            }}
-                          >
-                            Hotel
+                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.confirmationNo }}>
+                            Confirmation No
                           </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.booker,
-                            }}
-                          >
-                            Booker
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}>
+                            Book Date
                           </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              textAlign: "center",
-                              width: COLUMN_WIDTHS.checkIn,
-                            }}
-                          >
-                            Check In
+                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingDetails }}>
+                            Booking Details
                           </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              textAlign: "center",
-                              width: COLUMN_WIDTHS.checkOut,
-                            }}
-                          >
-                            Check Out
-                          </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              textAlign: "center",
-                              width: COLUMN_WIDTHS.noOfRooms,
-                            }}
-                          >
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.noOfRooms }}>
                             No. of Rooms
                           </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              textAlign: "right",
-                              width: COLUMN_WIDTHS.total,
-                            }}
-                          >
-                            Total
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.deadlineDate }}>
+                            Deadline Date
                           </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              textAlign: "center",
-                              width: COLUMN_WIDTHS.status,
-                            }}
-                          >
-                            Status
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentMode }}>
+                            Payment Mode
                           </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              textAlign: "center",
-                              width: COLUMN_WIDTHS.action,
-                            }}
-                          >
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentStatus }}>
+                            Payment Status
+                          </th>
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.notification }}>
+                            Notification
+                          </th>
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
                             Action
                           </th>
                         </tr>
@@ -717,12 +675,19 @@ const OfflineBookingList = () => {
                         ) : (
                           visibleBookings.map((booking, idx) => {
                             const statusKey = deriveStatusKey(booking);
-                            const sMeta = statusKey
-                              ? STATUS_META[statusKey]
-                              : null;
+                            const paymentMode = offlinePaymentMode(booking);
+                            const paymentStatus = offlinePaymentStatus(booking, statusKey);
+                            const stayFrom = fmtDate(booking.checkIn);
+                            const stayTo = fmtDate(booking.checkOut);
+                            const serviceFrom = fmtDate(booking.serviceFrom);
+                            const serviceTo = fmtDate(booking.serviceTo);
+                            const openDetails = () =>
+                              navigate(`/booking-details/offline-booking/${booking.supplierMainBasicId}`, {
+                                state: { booking },
+                              });
                             return (
                               <tr
-                                key={booking.id || idx}
+                                key={booking.supplierMainBasicId || booking.id || idx}
                                 style={{
                                   backgroundColor:
                                     idx % 2 === 0 ? "#ffffff" : "#f8f9fa",
@@ -748,128 +713,83 @@ const OfflineBookingList = () => {
                                 >
                                   {(page - 1) * perPage + idx + 1}
                                 </td>
+                                {isAdmin && (
+                                  <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.agentName }}>
+                                    <span className="fw-medium text-dark">
+                                      {booking.agentName || "-"}
+                                    </span>
+                                  </td>
+                                )}
+                                {/* Customer Name — the booking's passenger. */}
+                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.customerName }}>
+                                  <span className="d-inline-flex align-items-center" style={{ gap: "0.3rem" }}>
+                                    <FaUser style={{ color: "#6c757d", fontSize: "0.78rem", flexShrink: 0 }} />
+                                    <span className="fw-medium text-dark">
+                                      {booking.customerName || "-"}
+                                    </span>
+                                  </span>
+                                </td>
+                                {/* Booking Code — the offline booking's invoice number. */}
+                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.bookingCode }}>
+                                  <span className="fw-bold text-primary">
+                                    {booking.invoiceNumber || "-"}
+                                  </span>
+                                </td>
+                                {/* Confirmation No — the hotel's own number, saved
+                                    with the CONFIRMATION NO. button; blank until then. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {booking.hotelConfirmationNo ? (
+                                    <span className="fw-semibold text-dark" style={{ fontSize: "0.85rem" }}>
+                                      {booking.hotelConfirmationNo}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
+                                </td>
                                 <td
                                   className="text-muted"
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.bookDate,
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
-                                  {fmtDate(
-                                    booking.bookingDate || booking.createdAt,
-                                  )}
+                                  {fmtDate(booking.bookingDate || booking.createdAt) || "-"}
                                 </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.invoice,
-                                  }}
-                                >
-                                  <span
-                                    className="font-monospace fw-semibold"
-                                    style={{
-                                      color: "#1d4ed8",
-                                      fontSize: "0.78rem",
-                                    }}
-                                  >
-                                    {booking.invoiceNumber || "-"}
-                                  </span>
-                                </td>
-                                {isAdmin && (
-                                  <td
-                                    style={{
-                                      ...baseCellStyle,
-                                      width: COLUMN_WIDTHS.agent,
-                                    }}
-                                  >
-                                    <span className="fw-medium text-dark">
-                                      {booking.agentName || "Direct Client"}
+                                {/* Booking Details — the hotel(s) and stay dates, as
+                                    on the hotel list; a booking without a hotel shows
+                                    its services and their dates instead. */}
+                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.bookingDetails }}>
+                                  <div className="d-flex align-items-center" style={{ gap: "0.35rem", flexWrap: "wrap" }}>
+                                    <span className="fw-semibold text-dark" style={{ fontSize: "0.875rem" }}>
+                                      {booking.hotelName || booking.services || "-"}
                                     </span>
-                                  </td>
-                                )}
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.paxName,
-                                  }}
-                                >
-                                  <span className="fw-semibold text-dark">
-                                    {booking.customerName || "-"}
-                                  </span>
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    textAlign: "center",
-                                    width: COLUMN_WIDTHS.pax,
-                                  }}
-                                >
-                                  {Number(booking.totalPax) > 0 ? (
-                                    <>
-                                      <div className="fw-semibold text-dark">
-                                        {booking.totalPax}
-                                      </div>
-                                      {fmtPaxBreakdown(booking) && (
-                                        <div
-                                          className="text-muted"
-                                          style={{ fontSize: "0.7rem" }}
-                                        >
-                                          {fmtPaxBreakdown(booking)}
-                                        </div>
-                                      )}
-                                    </>
-                                  ) : (
-                                    <span className="text-muted">-</span>
+                                    {booking.hotelName
+                                      ? stayFrom &&
+                                        stayTo && (
+                                          <span className="text-muted" style={{ fontSize: "0.75rem" }}>
+                                            ({stayFrom} - {stayTo})
+                                          </span>
+                                        )
+                                      : serviceFrom && (
+                                          <span className="text-muted" style={{ fontSize: "0.75rem" }}>
+                                            ({serviceFrom}
+                                            {serviceTo && serviceTo !== serviceFrom ? ` - ${serviceTo}` : ""})
+                                          </span>
+                                        )}
+                                  </div>
+                                  {booking.hotelName && booking.services && (
+                                    <div className="text-muted" style={{ fontSize: "0.72rem" }}>
+                                      + {booking.services}
+                                    </div>
                                   )}
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.hotel,
-                                  }}
-                                >
-                                  {booking.hotelName ? (
-                                    <span className="fw-semibold text-dark">
-                                      {booking.hotelName}
-                                    </span>
-                                  ) : (
-                                    <span className="text-muted">-</span>
-                                  )}
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.booker,
-                                  }}
-                                >
-                                  {booking.bookerName ? (
-                                    <span className="fw-medium text-dark">
-                                      {booking.bookerName}
-                                    </span>
-                                  ) : (
-                                    <span className="text-muted">-</span>
-                                  )}
-                                </td>
-                                <td
-                                  className="text-muted"
-                                  style={{
-                                    ...baseCellStyle,
-                                    textAlign: "center",
-                                    width: COLUMN_WIDTHS.checkIn,
-                                  }}
-                                >
-                                  {fmtDate(booking.checkIn)}
-                                </td>
-                                <td
-                                  className="text-muted"
-                                  style={{
-                                    ...baseCellStyle,
-                                    textAlign: "center",
-                                    width: COLUMN_WIDTHS.checkOut,
-                                  }}
-                                >
-                                  {fmtDate(booking.checkOut)}
                                 </td>
                                 {/* No. of Rooms — summed across the booking's
                                     hotel lines (totalRooms / roomSummary). */}
@@ -885,31 +805,68 @@ const OfflineBookingList = () => {
                                     lines={booking.roomSummary}
                                   />
                                 </td>
+                                {/* Deadline Date — the cancellation deadline (UAE time). */}
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    fontFamily: "monospace",
+                                    width: COLUMN_WIDTHS.deadlineDate,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                  title={booking.cancellationDeadline ? "UAE time" : undefined}
+                                >
+                                  {fmtDeadline(booking.cancellationDeadline)}
+                                </td>
+                                {/* Payment Mode — plain black text, as on the hotel list. */}
                                 <td
                                   style={{
                                     ...baseCellStyle,
-                                    textAlign: "right",
-                                    width: COLUMN_WIDTHS.total,
-                                    whiteSpace: "nowrap",
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.paymentMode,
                                   }}
                                 >
-                                  {fmtTotal(booking) ? (
-                                    <span className="fw-semibold text-dark">
-                                      {fmtTotal(booking)}
-                                    </span>
-                                  ) : (
+                                  {paymentMode === "-" ? (
                                     <span className="text-muted">-</span>
+                                  ) : (
+                                    <span style={{ color: "#000" }}>{paymentMode}</span>
                                   )}
                                 </td>
                                 <td
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
-                                    width: COLUMN_WIDTHS.status,
+                                    width: COLUMN_WIDTHS.paymentStatus,
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
-                                  <StatusPill
-                                    meta={sMeta}
+                                  {paymentStatus === "-" ? (
+                                    <span className="text-muted">-</span>
+                                  ) : (
+                                    <span
+                                      style={{
+                                        color: PAYMENT_STATUS_COLOR[paymentStatus] || "#6c757d",
+                                        fontSize: "0.82rem",
+                                        fontWeight: "600",
+                                      }}
+                                    >
+                                      {paymentStatus}
+                                    </span>
+                                  )}
+                                </td>
+                                {/* Notification — the booking's status, in the
+                                    hotel list's words and colours. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.notification,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  <StatusText
+                                    statusKey={statusKey}
                                     raw={booking.bookingStatus}
                                   />
                                 </td>
@@ -930,22 +887,11 @@ const OfflineBookingList = () => {
                                         color: "#007bff",
                                         cursor: "pointer",
                                       }}
-                                      onClick={() =>
-                                        navigate(
-                                          `/booking-details/offline-booking/${booking.supplierMainBasicId}`,
-                                          { state: { booking } },
-                                        )
-                                      }
+                                      onClick={openDetails}
                                       onKeyDown={(e) => {
-                                        if (
-                                          e.key === "Enter" ||
-                                          e.key === " "
-                                        ) {
+                                        if (e.key === "Enter" || e.key === " ") {
                                           e.preventDefault();
-                                          navigate(
-                                            `/booking-details/offline-booking/${booking.supplierMainBasicId}`,
-                                            { state: { booking } },
-                                          );
+                                          openDetails();
                                         }
                                       }}
                                     />

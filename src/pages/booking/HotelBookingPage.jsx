@@ -20,7 +20,7 @@ import {
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
-import { resolveInhouseDeadline } from "../../utils/rateDeadline";
+import { resolveInhouseDeadline, chargesFromLine } from "../../utils/rateDeadline";
 import RefundBadge from "../../components/RefundBadge";
 import { uaeToday, labelOfRate, chargeNowText, REFUND_PARTIAL } from "../../utils/refundLabel";
 import { sanitizeRichHtml } from "../../utils/safeHtml";
@@ -431,6 +431,13 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
   const isNonRefundableRate =
     bookingData?.selectedRate?.nonRefundable === true ||
     bookingData?.selectedRate?.nonRefundable === "true";
+
+  // Policy popup: "From 9th Jun 2027, cancellation charges will be applied" —
+  // the day after cancellationDeadline, the deadline this page shows. Null for
+  // a non-refundable rate (charged from booking) or with no deadline.
+  const policyChargesFromLine = isNonRefundableRate
+    ? null
+    : chargesFromLine(cancellationDeadline);
 
   // True when the booking has BOTH refundable and non-refundable rooms
   // in roomBreakdown. Drives the notice at the top of the Guest Details
@@ -2361,6 +2368,13 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                         <h6 className="policy-section-title">
                           Cancellation Policy
                         </h6>
+                        {policyChargesFromLine && (
+                          <div className="policy-item">
+                            <div className="policy-text">
+                              {policyChargesFromLine}
+                            </div>
+                          </div>
+                        )}
                         {isNonRefundableRate ? (
                           <div className="policy-item">
                             <div
@@ -2402,11 +2416,11 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                               </div>
                             ),
                           )
-                        ) : (
+                        ) : !policyChargesFromLine ? (
                           <div className="policy-empty">
                             No cancellation policy specified.
                           </div>
-                        )}
+                        ) : null}
                       </section>
 
                       {/* Amendment Policy */}

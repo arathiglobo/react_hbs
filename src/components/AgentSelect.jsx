@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import Select from "react-select";
 
 /**
@@ -107,8 +107,16 @@ export default function AgentSelect({
   placeholder = "Select Agent",
   isInvalid = false,
 }) {
-  const safeAgents = Array.isArray(agents) ? agents.filter(Boolean) : [];
-  const options = safeAgents.map(buildOption);
+  // Build the option list once per `agents` array, not on every render.
+  // react-select resets the highlighted row to the first option whenever
+  // `options` is a new array whose objects don't include the hovered one.
+  // Pages that re-render often (e.g. HotelSearch's 100 ms typing
+  // placeholder) made the hover highlight flicker between the hovered row
+  // and the first row.
+  const options = useMemo(() => {
+    const safeAgents = Array.isArray(agents) ? agents.filter(Boolean) : [];
+    return safeAgents.map(buildOption);
+  }, [agents]);
   const selected =
     options.find((o) => o.value === safeStr(value)) || null;
 

@@ -50,6 +50,7 @@ import "../../styles/BulkCityMapping.css";
 /** Providers the BE bulk engine currently supports (lowercase keys the BE expects). */
 const SUPPORTED_PROVIDERS = [
   "atharva",
+  "atharva_v2",
   "grn",
   "goglobal",
   "iwtx",
@@ -73,6 +74,8 @@ const UNSUPPORTED_PROVIDERS = [
 
 const PROVIDER_LABEL = {
   atharva: "Atharva",
+  // ATHARVA_V2 is shown as ATHARVA_V2_API, like everywhere else in the app.
+  atharva_v2: "ATHARVA_V2_API",
   grn: "GRN",
   goglobal: "GoGlobal",
   iwtx: "IWTX",

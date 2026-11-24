@@ -11,7 +11,7 @@ const LONG_WRITE_MS = 300000;
 /** While a run is going, how often to ask whether it has finished. */
 const RUN_POLL_MS = 5000;
 
-const SUPPLIERS = ["grn", "goglobal", "iwtx", "atharva", "x3"];
+const SUPPLIERS = ["grn", "goglobal", "iwtx", "atharva", "atharva_v2", "x3"];
 
 export const MATCH_GROUPS = {
   CONFIDENT: {
@@ -60,7 +60,9 @@ const NAME_LEVELS = {
 
 const errorText = (err, fallback) => err?.response?.data?.error || fallback;
 
-const supplierLabel = (s) => String(s || "").toUpperCase();
+// ATHARVA_V2 is shown as ATHARVA_V2_API, like everywhere else in the app.
+const supplierLabel = (s) =>
+  String(s || "").toLowerCase() === "atharva_v2" ? "ATHARVA_V2_API" : String(s || "").toUpperCase();
 
 /** One line of evidence, in plain words. */
 const evidenceLines = (row) => {
@@ -389,7 +391,7 @@ export default function CityMatchingPanel({ active, onChanged }) {
       </div>
       <p className="small text-muted px-3 pt-2 mb-2">
         Each night, works out which of our cities each unmapped supplier city probably is, from where its hotels are. It covers GRN,
-        GoGlobal, IWTX, Atharva and X3, whose hotels we hold with coordinates. Nothing is mapped until you approve it, and a run changes no
+        GoGlobal, IWTX, Atharva, ATHARVA_V2_API and X3, whose hotels we hold with coordinates. Nothing is mapped until you approve it, and a run changes no
         search.
         {run && (
           <>

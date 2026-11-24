@@ -77,9 +77,14 @@ const HotelMapping = () => {
     "ATHARVA",
     "GRN",
     "GOGLOBAL",
+    "ATHARVA_V2",
   ]);
 
-  const platformOptions = platforms.map((p) => ({ value: p, label: p }));
+  // The value is the backend Supplier code; ATHARVA_V2 is shown as ATHARVA_V2_API.
+  const platformOptions = platforms.map((p) => ({
+    value: p,
+    label: p === "ATHARVA_V2" ? "ATHARVA_V2_API" : p,
+  }));
 
   const [formData, setFormData] = useState({
     masterCountryId: "",
@@ -475,9 +480,9 @@ const HotelMapping = () => {
                           style={{ height: "50px", borderRadius: "15px" }}
                         >
                           <option value="">Select Base Supplier</option>
-                          {platforms.map((p, idx) => (
-                            <option key={idx} value={p}>
-                              {p}
+                          {platformOptions.map((opt, idx) => (
+                            <option key={idx} value={opt.value}>
+                              {opt.label}
                             </option>
                           ))}
                         </Form.Select>
@@ -739,7 +744,7 @@ const HotelMapping = () => {
                                       {/* <Badge bg="secondary" className="px-2 py-1">
                                       {hotel.supplier}
                                     </Badge> */}
-                                      {hotel.supplier}
+                                      {hotel.supplier === "ATHARVA_V2" ? "ATHARVA_V2_API" : hotel.supplier}
                                     </td>
                                     <td className="align-middle fw-medium small text-break">
                                       {hotel.supplierHotelId}

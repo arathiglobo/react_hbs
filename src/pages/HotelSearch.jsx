@@ -495,6 +495,32 @@ export default function HotelSearch({
   const [agentStaffOptions, setAgentStaffOptions] = useState([]);
   const [selectedAgentStaff, setSelectedAgentStaff] = useState(null);
 
+  // react-select options for the two dropdowns above, built once per fetched
+  // list. If `options` is a new array on every render, react-select moves the
+  // hover highlight back to the first row, and the 100 ms typing placeholder
+  // re-renders this page constantly, so the highlight flickered.
+  const employeeSelectOptions = useMemo(
+    () =>
+      employees.map((e) => ({
+        value: e.employeeId,
+        label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+      })),
+    [employees],
+  );
+  const agentStaffSelectOptions = useMemo(
+    () =>
+      agentStaffOptions.map((s) => ({
+        value: s.id,
+        label: (s.agentName ||
+          [s.firstName, s.lastName]
+            .filter(Boolean)
+            .join(" ")
+            .trim() ||
+          `Sub-user #${s.id}`),
+      })),
+    [agentStaffOptions],
+  );
+
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
@@ -822,13 +848,17 @@ export default function HotelSearch({
   const summaryBarRef = useRef(null);
   const [summaryBarHeight, setSummaryBarHeight] = useState(0);
 
-  const starOptions = [
-    { value: 5, label: "5 Stars" },
-    { value: 4, label: "4 Stars" },
-    { value: 3, label: "3 Stars" },
-    { value: 2, label: "2 Stars" },
-    { value: 1, label: "1 Star" },
-  ];
+  // Memoized for the same hover-flicker reason as employeeSelectOptions.
+  const starOptions = useMemo(
+    () => [
+      { value: 5, label: "5 Stars" },
+      { value: 4, label: "4 Stars" },
+      { value: 3, label: "3 Stars" },
+      { value: 2, label: "2 Stars" },
+      { value: 1, label: "1 Star" },
+    ],
+    [],
+  );
 
   const hotelTypeOptions = [
     { value: "hotel", label: "Hotel" },
@@ -847,6 +877,7 @@ export default function HotelSearch({
      { value: "darina", label: "Darina" },
      { value: "grn", label: "GRN" },
      { value: "goglobal", label: "GoGlobal" },
+     { value: "atharva_v2", label: "Atharva-V2" },
   ];
 
   // Channel sidebar filter — every supplier super_admin has registered
@@ -2584,10 +2615,7 @@ export default function HotelSearch({
                           <span className="text-muted small">(optional)</span>
                         </Form.Label>
                         <Select
-                          options={employees.map((e) => ({
-                            value: e.employeeId,
-                            label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
-                          }))}
+                          options={employeeSelectOptions}
                           value={selectedEmployee}
                           onChange={(option) => setSelectedEmployee(option)}
                           placeholder="Select employee"
@@ -2625,15 +2653,7 @@ export default function HotelSearch({
                           <span className="text-muted small">(optional)</span>
                         </Form.Label>
                         <Select
-                          options={agentStaffOptions.map((s) => ({
-                            value: s.id,
-                            label: (s.agentName ||
-                              [s.firstName, s.lastName]
-                                .filter(Boolean)
-                                .join(" ")
-                                .trim() ||
-                              `Sub-user #${s.id}`),
-                          }))}
+                          options={agentStaffSelectOptions}
                           value={selectedAgentStaff}
                           onChange={(option) => setSelectedAgentStaff(option)}
                           placeholder="Select agent staff"

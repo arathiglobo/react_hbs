@@ -122,3 +122,37 @@ export const nightsBetween = (checkInStr, checkOutStr) => {
   if (!cin || !cout) return 0;
   return Math.max(0, Math.round((cout - cin) / (1000 * 60 * 60 * 24)));
 };
+
+/**
+ * Current date-time in UAE (Asia/Dubai) as "yyyy-MM-ddTHH:mm" — the format of
+ * a datetime-local input. Offline booking cancellation deadlines are entered,
+ * compared and shown in UAE time whatever zone the browser is in (the server
+ * does the same). Same-format strings compare in time order.
+ */
+export const uaeNowInputValue = () => {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Dubai",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date())
+      .map((p) => [p.type, p.value])
+  );
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+};
+
+/**
+ * "2026-11-25 18:00" / "2026-11-25T18:00" (a UAE-time value from the server)
+ * → "25 Nov 2026, 18:00". The text is taken as it is — no time-zone shift.
+ */
+export const formatUaeDateTime = (value) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(String(value || ""));
+  if (!m) return "";
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${m[3]} ${months[Number(m[2]) - 1]} ${m[1]}, ${m[4]}:${m[5]}`;
+};
