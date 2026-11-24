@@ -1157,6 +1157,26 @@ const HotelBookingList = ({
     [resetAllPages],
   );
 
+  // "Clear" next to the Check-in Date filter resets every filter on the
+  // page — search, Booking Type, Check-in Date and the Time Period month /
+  // year — back to their defaults, and returns to page 1. It is enabled as
+  // soon as any one of them is set (it used to clear only the date).
+  const hasActiveFilters =
+    Boolean((search || "").trim()) ||
+    status !== "all" ||
+    Boolean(checkInDateFilter) ||
+    Boolean(selectedMonth) ||
+    Boolean(selectedYear);
+
+  const handleClearFilters = useCallback(() => {
+    setSearch("");
+    setStatus("all");
+    setCheckInDateFilter("");
+    setSelectedMonth("");
+    setSelectedYear("");
+    resetAllPages();
+  }, [resetAllPages]);
+
   // Filter bookings based on search term and Check-in Date filter.
   const filteredBookings = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -1517,12 +1537,9 @@ const HotelBookingList = ({
                           <Button
                             variant="outline-secondary"
                             size="sm"
-                            onClick={() => {
-                              setCheckInDateFilter("");
-                              resetAllPages();
-                            }}
-                            disabled={!checkInDateFilter}
-                            aria-label="Clear check-in date filter"
+                            onClick={handleClearFilters}
+                            disabled={!hasActiveFilters}
+                            aria-label="Clear all filters"
                             style={{ fontSize: "0.85rem", height: "46px", whiteSpace: "nowrap" }}
                           >
                             Clear
