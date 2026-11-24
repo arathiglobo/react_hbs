@@ -124,6 +124,7 @@ const MakeYourOwnPackageV2BookingList = () => {
   const [status, setStatus] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
+  const [checkInDateFilter, setCheckInDateFilter] = useState("");
 
   // Same seven Booking Type options shipped by Hotel Booking List.
   // Make Your Own Package V2 backend persists statuses like
@@ -218,6 +219,17 @@ const MakeYourOwnPackageV2BookingList = () => {
         if (normStatus(b.bookingStatus) !== "invoiced") return false;
       }
 
+      // Check-in Date picker — exact-day match on the package's tour date
+      // (its check-in; the picker gives YYYY-MM-DD). Rows without a tour
+      // date are hidden while a date is picked. Works together with the
+      // Booking Type and Time Period filters.
+      if (
+        checkInDateFilter &&
+        String(b.tourDate || "").slice(0, 10) !== checkInDateFilter
+      ) {
+        return false;
+      }
+
       if (tour && !isNaN(tour.getTime()) && (selectedMonth || selectedYear)) {
         const m = tour.getMonth() + 1;
         const y = tour.getFullYear();
@@ -244,11 +256,11 @@ const MakeYourOwnPackageV2BookingList = () => {
       }
       return true;
     });
-  }, [rows, search, status, selectedMonth, selectedYear]);
+  }, [rows, search, status, checkInDateFilter, selectedMonth, selectedYear]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, status, selectedMonth, selectedYear, perPage]);
+  }, [search, status, checkInDateFilter, selectedMonth, selectedYear, perPage]);
 
   const totalEntries = filteredBookings.length;
   const safeTotalPages = Math.max(1, Math.ceil(totalEntries / perPage));
@@ -394,14 +406,18 @@ const MakeYourOwnPackageV2BookingList = () => {
                   style={{ borderRadius: "8px" }}
                 >
                   <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Booking Type
-                    </h6>
-                    <Row className="g-2">
+                    {/* Each filter carries its own label inside its column
+                        and the row bottom-aligns, so the Booking Type
+                        select, the Check-in Date picker and Clear sit on
+                        one line (same layout as DayStay / HotelBookingList). */}
+                    <Row className="g-2 align-items-end">
                       <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Booking Type
+                        </h6>
                         <Form.Select
                           value={status}
                           onChange={(e) => setStatus(e.target.value)}
@@ -415,6 +431,42 @@ const MakeYourOwnPackageV2BookingList = () => {
                             </option>
                           ))}
                         </Form.Select>
+                      </Col>
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Check-in Date
+                        </h6>
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={checkInDateFilter}
+                            onChange={(e) => {
+                              setCheckInDateFilter(e.target.value);
+                            }}
+                            size="sm"
+                            aria-label="Check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px" }}
+                          />
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => {
+                              setCheckInDateFilter("");
+                              setSearch("");
+                              setStatus("all");
+                              setSelectedMonth("");
+                              setSelectedYear("");
+                            }}
+                            disabled={!checkInDateFilter && !search && status === "all" && !selectedMonth && !selectedYear}
+                            aria-label="Clear check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px", whiteSpace: "nowrap" }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Card.Body>
