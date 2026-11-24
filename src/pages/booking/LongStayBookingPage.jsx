@@ -40,6 +40,11 @@ import {
 // /booking/hotel.
 import "../../styles/HotelBookingPage.css";
 import { orderIdPathSegment } from "../../utils/urlSafety";
+import {
+  CCAVENUE_OUTCOME,
+  confirmCCAvenuePayment,
+} from "../../utils/ccavenuePayment";
+import { chargesFromLine } from "../../utils/rateDeadline";
 
 // Online-payment gateways — mirrors HotelBookingPage so the operator gets
 // the same payment picker when the agent's credit is short. CC Avenue is
@@ -481,20 +486,15 @@ export default function LongStayBookingPage() {
     navigate(location.pathname, { replace: true, state: {} });
 
     (async () => {
-      if (ccavenueStatus !== "success") {
-        toast.error("Payment was not completed. Please try again.");
-        return;
-      }
       try {
         setSubmitting(true);
-        const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
+        // Waits out a "verifying" return (bank said paid, CC Avenue's
+        // status API not yet) instead of showing "Payment was not completed".
+        const outcome = await confirmCCAvenuePayment(
+          ccavenueOrderId,
+          ccavenueStatus,
         );
-        if (statusResponse.data?.status !== "SUCCESS") {
-          toast.error(
-            statusResponse.data?.statusMessage ||
-              "Payment was not successful. Please try again.",
-          );
+        if (outcome !== CCAVENUE_OUTCOME.PAID) {
           return;
         }
         const res = await axiosInstance.post(
@@ -584,6 +584,10 @@ export default function LongStayBookingPage() {
     if (!cancellationDeadline) return false;
     return uaeToday() > cancellationDeadline;
   })();
+  // Policy popup: "From 9th Jun 2027, cancellation charges will be applied" —
+  // the day after cancellationDeadline, the deadline this page shows. Null for
+  // a non-refundable room, which has no deadline.
+  const policyChargesFromLine = chargesFromLine(cancellationDeadline);
   // Only shown for Refundable rates whose deadline hasn't passed.
   // Non-refundable / past-deadline / On-Request skip the choice.
   const showVoucherChoice =
@@ -1602,6 +1606,11 @@ export default function LongStayBookingPage() {
                   {/* Cancellation Policy */}
                   <section className="policy-section">
                     <h6 className="policy-section-title">Cancellation Policy</h6>
+                    {policyChargesFromLine && (
+                      <div className="policy-item">
+                        <div className="policy-text">{policyChargesFromLine}</div>
+                      </div>
+                    )}
                     {(draft?.contract?.cancellationPolicy || []).length > 0 ? (
                       draft.contract.cancellationPolicy.map((p, i) => (
                         <div key={i} className="policy-item">
@@ -1610,7 +1619,7 @@ export default function LongStayBookingPage() {
                           </div>
                         </div>
                       ))
-                    ) : !draft?.contract?.cancellationPolicyNotes ? (
+                    ) : !draft?.contract?.cancellationPolicyNotes && !policyChargesFromLine ? (
                       <div className="policy-empty">
                         No cancellation policy configured.
                       </div>

@@ -46,10 +46,14 @@ import {
   worstLabel,
   uaeToday,
 } from "../../../utils/refundLabel";
-import { parseSupplierDate } from "../../../utils/rateDeadline";
+import { parseSupplierDate, chargesFromLine } from "../../../utils/rateDeadline";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
 import { orderIdPathSegment } from "../../../utils/urlSafety";
+import {
+  CCAVENUE_OUTCOME,
+  confirmCCAvenuePayment,
+} from "../../../utils/ccavenuePayment";
 
 const SPECIAL_REQUEST_OPTIONS = [
   "Early Check-In", "Non-Smoking Rooms", "High Floor", "VIP Client",
@@ -481,26 +485,17 @@ export default function StudentBookingPage() {
     }
 
     (async () => {
-      if (ccavenueStatus !== "success") {
-        toast.error("Payment was not completed. Please try again.");
-        return;
-      }
-      try {
-        const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
-        );
-        if (statusResponse.data?.status !== "SUCCESS") {
-          toast.error(
-            statusResponse.data?.statusMessage ||
-              "Payment was not successful. Please try again.",
-          );
-          return;
-        }
-      } catch (err) {
-        console.error("Could not verify CC Avenue payment status:", err);
-        toast.error(
-          "Could not verify payment status. Please contact support if you were charged.",
-        );
+      // Confirm the payment with the backend first. A "verifying" return
+      // (bank said paid, CC Avenue's status API not yet) is waited for
+      // instead of being shown as "Payment was not completed".
+      // Buttons stay disabled while the payment is being verified.
+      setIsSubmitting(true);
+      const outcome = await confirmCCAvenuePayment(
+        ccavenueOrderId,
+        ccavenueStatus,
+      );
+      if (outcome !== CCAVENUE_OUTCOME.PAID) {
+        setIsSubmitting(false);
         return;
       }
       finalizeAfterCCAvenue();
@@ -586,6 +581,14 @@ export default function StudentBookingPage() {
   const bookingRefundLabel = bookingData?.roomBreakdown?.length
     ? worstLabel(bookingData.roomBreakdown.map((slot) => labelOfRate(slot)))
     : labelOfRate(bookingData?.selectedRate);
+
+  // Policy popup: "From 9th Jun 2027, cancellation charges will be applied" —
+  // the day after cancellationDeadline, shown only where the confirm modal
+  // shows that deadline, and not under the popup's "Non Refundable" wording.
+  const policyChargesFromLine =
+    isNonRefundableRate || bookingRefundLabel === REFUND_NON_REFUNDABLE
+      ? null
+      : chargesFromLine(cancellationDeadline);
 
   // Show the Voucher Now / Voucher Later choice only for refundable
   // Available rates that still have free-cancellation time left, or that only
@@ -1675,6 +1678,11 @@ export default function StudentBookingPage() {
                             : " — cancellation is allowed per the hotel's refund terms."}
                       </div>
                     </div>
+                    {policyChargesFromLine && (
+                      <div className="policy-item">
+                        <div className="policy-text">{policyChargesFromLine}</div>
+                      </div>
+                    )}
                   </section>
 
                   <section className="policy-section policy-section-last">

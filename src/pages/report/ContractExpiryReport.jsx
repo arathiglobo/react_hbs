@@ -588,7 +588,7 @@ const handleSendEmail = async () => {
 
               <h6 className="fw-bold text-primary mb-3">Contract Details</h6>
               <Row className="align-items-end g-4">
-                <Col md={2}>
+                <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
                     <Form.Control
@@ -599,7 +599,7 @@ const handleSendEmail = async () => {
                     />
                   </Form.Group>
                 </Col>
-                <Col md={2}>
+                <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
                     <Form.Control 
@@ -618,29 +618,31 @@ const handleSendEmail = async () => {
                 </Col>
               </Row>
 
-              {/* Table search on the left; Search / Reset next to the export buttons */}
-              <Row className="mt-4 align-items-center g-2">
-                <Col md="auto">
-                  <input
-                    type="text"
-                    value={tableSearch}
-                    onChange={(e)=>setTableSearch(e.target.value)}
-                    placeholder="search here"
-                    className="form-control form-control-sm w-auto"
-                  />
-                </Col>
-                <Col className="d-flex flex-wrap gap-2 justify-content-end">
+              {/* One line: "search here" box on the left;
+                  Search / Reset / Mail / Print / PDF / Excel on the right */}
+              <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
+                <input
+                  type="text"
+                  value={tableSearch}
+                  onChange={(e)=>setTableSearch(e.target.value)}
+                  placeholder="search here"
+                  className="form-control form-control-sm"
+                  style={{ width: "200px" }}
+                />
+
+                <div className="d-flex gap-2 flex-wrap">
                   <Button
                     variant="success"
                     size="sm"
-                    style={{ backgroundColor: "#676767", borderColor: "#676767", minWidth: 120 }} onClick={handleSearch}
+                    style={{ backgroundColor: "#676767", borderColor: "#676767", minWidth: "100px" }}
+                    onClick={handleSearch}
                   >
                     <i className="fas fa-search me-1"></i>Search
                   </Button>
                   <Button
                     variant="outline-secondary"
                     size="sm"
-                    style={{ minWidth: 120 }}
+                    style={{ minWidth: "100px" }}
                     onClick={handleReset}
                   >
                     <i className="fas fa-redo me-1"></i>Reset
@@ -657,13 +659,13 @@ const handleSendEmail = async () => {
                   <Button variant="outline-success" size="sm" onClick={handleExcel}>
                     <i className="fas fa-file-excel me-1"></i>Excel
                   </Button>
-                </Col>
-              </Row>
+                </div>
+              </div>
             </div>
 
             {/* Table Section */}
             <Card.Body className="p-0 mt-1">
-              {/* Display Row (the table search box sits with the action buttons above) */}
+              {/* Display Row (the search box is in the toolbar above) */}
               <div className="p-2 border-bottom">
                 <Row className="d-flex justify-content-between align-items-center">
                   <Col md="auto">

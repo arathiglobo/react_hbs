@@ -9,6 +9,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
+// pagination-modern (orange pager), as on the other report pages
+import "../../styles/HotelSearch.css";
 
 // Same "2026-Jul-29 - 09:55:21 AM" formatter the User Management → Login Logs
 // page uses, so a login prints identically on both screens. Null (an open
@@ -16,6 +18,7 @@ import { csvCell } from "../../utils/csvSafe";
 // is visually distinct from a closed one.
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const pad = (n) => String(n).padStart(2, "0");
+
 const formatAudit = (iso) => {
   if (!iso) return "0000:00:00";
   const d = new Date(iso);
@@ -53,6 +56,10 @@ export default function UserLogins() {
   const [allLogins, setAllLogins] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  // Filters behind the rows on screen (set on Search / Reset), so the mailed
+  // report matches the table even if the inputs were edited afterwards
+  // without searching again.
+  const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
 
   useEffect(()=>{
     setCurrentPage(1);
@@ -129,11 +136,13 @@ export default function UserLogins() {
       return;
     }
     setCurrentPage(1);
+    setAppliedFilters(filters);
     await fetchLogins(filters);
   };
 
   const handleReset = async () => {
     setFilters(EMPTY_FILTERS);
+    setAppliedFilters(EMPTY_FILTERS);
     setSearchQuery("");
     setCurrentPage(1);
     await fetchLogins();
@@ -146,21 +155,26 @@ export default function UserLogins() {
     }
     setIsSending(true);
     try{
+      // The server re-runs the report with the filters behind the table
       const response=await axiosInstance.post('/api/reports/send-email',{
         email : emailAddress,
         reportType:'logins',
          filters:{
-
-         }
+           ...appliedFilters,
+           searchQuery,
+         },
+         recordCount: filteredlogins.length,
       })
       if(response.data){
-        toast.success("Report Sent Successfully!")
+        const sentCount = response.data.recordCount ?? filteredlogins.length;
+        toast.success(`Report with ${sentCount} record(s) sent successfully!`)
         setShowMailModal(false);
         setEmailAddress("");
       }
     }
     catch(error){
-      toast.error("failed to sent mail")
+      console.error("Email send error:", error);
+      toast.error(error.response?.data?.message || "Failed to send mail")
     }finally{
       setIsSending(false);
     }
@@ -286,6 +300,29 @@ const filteredlogins = logins.filter(l=>{
   const endIndex = startIndex + itemsPerPage;
   const currentLogins = filteredlogins.slice(startIndex,endIndex);
 
+  // Page buttons, as on Online Daily Sales and Time Limit: always the first 3
+  // and last 3 pages, plus the current page and its neighbours; "…" fills
+  // each gap. A gap of a single page shows that page instead — an ellipsis
+  // there would hide nothing. 30 pages on page 1 → 1 2 3 … 28 29 30.
+  const pageNumbers = useMemo(() => {
+    const EDGE_PAGES = 3;
+    const shown = new Set();
+    for (let i = 1; i <= Math.min(EDGE_PAGES, totalPages); i++) shown.add(i);
+    for (let i = Math.max(1, totalPages - EDGE_PAGES + 1); i <= totalPages; i++) shown.add(i);
+    for (let i = Math.max(1, currentPage - 1); i <= Math.min(totalPages, currentPage + 1); i++) {
+      shown.add(i);
+    }
+    const sorted = Array.from(shown).sort((a, b) => a - b);
+    const nums = [];
+    sorted.forEach((n, idx) => {
+      const prev = sorted[idx - 1];
+      if (prev !== undefined && n - prev === 2) nums.push(prev + 1);
+      else if (prev !== undefined && n - prev > 2) nums.push(`ellipsis-${prev}`);
+      nums.push(n);
+    });
+    return nums;
+  }, [totalPages, currentPage]);
+
   return (
     <div className="bg-light d-flex flex-column" style={{ minHeight: "100vh" }}>
       <TopBar />
@@ -358,19 +395,26 @@ const filteredlogins = logins.filter(l=>{
                     </Form.Select>
                   </Form.Group>
                 </Col>
-                <Col md={12} className="d-flex justify-content-end gap-2 mt-3">
-                  <Button variant="success" size="sm" onClick={handleSearch} disabled={isLoading}>
-                    <i className="fas fa-search me-1"></i>Search
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={handleReset} disabled={isLoading}>
-                    <i className="fas fa-undo me-1"></i>Reset
-                  </Button>
-                </Col>
               </Row>
 
-              {/* Action Buttons */}
-              <Row className="mt-4">
-                <Col md={12} className="d-flex gap-2 justify-content-end">
+              {/* One action row — quick search on the left; Search / Reset /
+                  Mail / Print / PDF / Excel on the right (as on Online Daily Sales) */}
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-4">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e)=>setSearchQuery(e.target.value)}
+                  placeholder="search here"
+                  className="form-control form-control-sm"
+                  style={{ width: 200 }}
+                />
+                <div className="d-flex flex-wrap justify-content-end align-items-center gap-2">
+                  <Button variant="success" size="sm" className="px-4" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch} disabled={isLoading}>
+                    <i className="fas fa-search me-1"></i>Search
+                  </Button>
+                  <Button variant="outline-secondary" size="sm" className="px-4" onClick={handleReset} disabled={isLoading}>
+                    <i className="fas fa-undo me-1"></i>Reset
+                  </Button>
                   <Button variant="outline-primary" size="sm" onClick={()=>(setShowMailModal(true))}>
                     <i className="fas fa-envelope me-1"></i>Mail
                   </Button>
@@ -383,21 +427,8 @@ const filteredlogins = logins.filter(l=>{
                   <Button variant="outline-success" size="sm" onClick={handleExcel}>
                     <i className="fas fa-file-excel me-1"></i>Excel
                   </Button>
-                </Col>
-              </Row>
-
-              {/* Search Input */}
-              <Row className="mt-3">
-                <Col className="d-flex justify-content-end">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e)=>setSearchQuery(e.target.value)}
-                    placeholder="search here"
-                    className="form-control form-control-sm w-auto"
-                  />
-                </Col>
-              </Row>
+                </div>
+              </div>
             </div>
 
             {/* Table Section */}
@@ -443,44 +474,36 @@ const filteredlogins = logins.filter(l=>{
               </Table>
 
               {/* Pagination */}
-              <div className="d-flex justify-content-between align-items-center p-3 border-top">
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 p-3 border-top">
                 <div>
                   <small className="text-muted">
                     Showing {filteredlogins.length > 0 ? startIndex + 1 : 0} to {Math.min(endIndex, filteredlogins.length)} of {filteredlogins.length} entries
                   </small>
                 </div>
-                <div>
-                  <Pagination className="mb-0">
-                    <Pagination.Prev onClick={()=>setCurrentPage(prev=>Math.max(1,prev-1))}
-                      disabled={currentPage === 1}/>
-
-                    {Array.from({length:totalPages},(_,i)=>i+1).map((pageNum)=>{
-                      if(
-                        pageNum === 1||
-                        pageNum === totalPages||
-                        (pageNum >= currentPage -1 && pageNum <= currentPage+1)
-                      ){
-                        return(
-                          <Pagination.Item
-                          key={pageNum}
-                          active={pageNum === currentPage}
-                          onClick={()=>setCurrentPage(pageNum)}>
-                            {pageNum}
-                          </Pagination.Item>
-                        )
-                      }else if(
-                        pageNum === currentPage -2 ||
-                        pageNum === currentPage +2
-                      ){
-                        return <Pagination.Ellipsis key={pageNum} />;
-                      }
-                      return null;
-                    })}
-
-                    <Pagination.Next onClick={()=>setCurrentPage(prev=>Math.min(totalPages,prev+1))}
-                      disabled={currentPage === totalPages || totalPages === 0}/>
-                  </Pagination>
-                </div>
+                {/* The /new-booking/hotel pager (pagination-modern) */}
+                <Pagination className="mb-0 pagination-modern">
+                  <Pagination.Prev
+                    disabled={currentPage === 1 || totalPages === 0}
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  />
+                  {pageNumbers.map((n) =>
+                    typeof n === "number" ? (
+                      <Pagination.Item
+                        key={n}
+                        active={n === currentPage}
+                        onClick={() => setCurrentPage(n)}
+                      >
+                        {n}
+                      </Pagination.Item>
+                    ) : (
+                      <Pagination.Ellipsis key={n} disabled />
+                    ),
+                  )}
+                  <Pagination.Next
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  />
+                </Pagination>
               </div>
             </Card.Body>
           </Card>

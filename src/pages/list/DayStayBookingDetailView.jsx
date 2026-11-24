@@ -63,6 +63,10 @@ import {
 // detail picker renders identically to the hotel detail picker.
 import "../../styles/HotelBookingPage.css";
 import { orderIdPathSegment } from "../../utils/urlSafety";
+import {
+  CCAVENUE_OUTCOME,
+  confirmCCAvenuePayment,
+} from "../../utils/ccavenuePayment";
 
 // Online-payment gateways — mirrors BookingDetailedView (hotel). CCAvenue
 // is the only real gateway wired; the dummy /payment/:gateway path is kept
@@ -801,22 +805,17 @@ export default function DayStayBookingDetailView() {
     navigate(location.pathname, { replace: true, state: {} });
 
     (async () => {
-      if (ccavenueStatus !== "success") {
-        toast.error("Payment was not completed. Please try again.");
-        return;
-      }
       try {
         setConfirmingBooking(true);
         // Re-verify server-side before finalizing — never trust the
         // redirect's own query string alone.
-        const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
+        // Waits out a "verifying" return (bank said paid, CC Avenue's
+        // status API not yet) instead of showing "Payment was not completed".
+        const outcome = await confirmCCAvenuePayment(
+          ccavenueOrderId,
+          ccavenueStatus,
         );
-        if (statusResponse.data?.status !== "SUCCESS") {
-          toast.error(
-            statusResponse.data?.statusMessage ||
-              "Payment was not successful. Please try again.",
-          );
+        if (outcome !== CCAVENUE_OUTCOME.PAID) {
           return;
         }
         await axiosInstance.post(

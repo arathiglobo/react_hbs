@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Card,
   Button,
@@ -31,6 +31,11 @@ import {
   FaInbox,
 } from "react-icons/fa";
 import "../styles/Invoice.css";
+// .pagination-modern — the orange rounded pager used on /new-booking/hotel,
+// Online Daily Sales, Time Limit Online Sales and Hotel Booking History.
+// Every rule in that stylesheet is namespaced under its own class names, so
+// importing it here changes nothing else on this page.
+import "../styles/HotelSearch.css";
 
 // Shared invoice-table cell styling. Identical to the per-cell inline
 // styles used previously — only the repetition has been removed.
@@ -314,6 +319,36 @@ export default function Invoice() {
       window.removeEventListener("resize", handleResize);
     };
   }, []);
+
+  // Page buttons, as on Online Daily Sales, Time Limit and Hotel Booking
+  // History: always the first 3 and last 3 pages, plus the current page and
+  // its neighbours; "…" fills each gap. A gap of a single page shows that
+  // page instead — an ellipsis there would hide nothing.
+  // 30 pages on page 1 → 1 2 3 … 28 29 30.
+  const pageNumbers = useMemo(() => {
+    const EDGE_PAGES = 3;
+    const shown = new Set();
+    for (let i = 1; i <= Math.min(EDGE_PAGES, totalPages); i++) shown.add(i);
+    for (let i = Math.max(1, totalPages - EDGE_PAGES + 1); i <= totalPages; i++) {
+      shown.add(i);
+    }
+    for (
+      let i = Math.max(1, currentPage - 1);
+      i <= Math.min(totalPages, currentPage + 1);
+      i++
+    ) {
+      shown.add(i);
+    }
+    const sorted = Array.from(shown).sort((a, b) => a - b);
+    const nums = [];
+    sorted.forEach((n, idx) => {
+      const prev = sorted[idx - 1];
+      if (prev !== undefined && n - prev === 2) nums.push(prev + 1);
+      else if (prev !== undefined && n - prev > 2) nums.push(`ellipsis-${prev}`);
+      nums.push(n);
+    });
+    return nums;
+  }, [totalPages, currentPage]);
 
   // Load all invoice records by default, then keep pagination on the current
   // data source: initial list until filters are applied, filtered list after.
@@ -922,6 +957,7 @@ export default function Invoice() {
                               Customer
                             </th>
                             <th
+                              className="invoice-col-details"
                               style={{
                                 ...headerCellStyle,
                                 textAlign: "center",
@@ -988,6 +1024,7 @@ export default function Invoice() {
                               Total Amount
                             </th>
                             <th
+                              className="invoice-col-action"
                               style={{
                                 ...headerCellStyle,
                                 textAlign: "center",
@@ -1034,6 +1071,7 @@ export default function Invoice() {
                                     {serialNumber}
                                   </td>
                                   <td
+                                    className="invoice-col-wrap"
                                     style={baseCellStyle}
                                     title={invoice.customerName || "-"}
                                   >
@@ -1042,6 +1080,7 @@ export default function Invoice() {
                                     </span>
                                   </td>
                                   <td
+                                    className="invoice-col-details"
                                     style={{
                                       ...baseCellStyle,
                                       textAlign: "center",
@@ -1070,6 +1109,7 @@ export default function Invoice() {
                                     </OverlayTrigger>
                                   </td>
                                   <td
+                                    className="invoice-col-wrap"
                                     style={baseCellStyle}
                                     title={invoice.agentName || "-"}
                                   >
@@ -1091,6 +1131,7 @@ export default function Invoice() {
                                     </span>
                                   </td>
                                   <td
+                                    className="invoice-col-wrap"
                                     style={baseCellStyle}
                                     title={invoice.hotelName || "-"}
                                   >
@@ -1120,6 +1161,7 @@ export default function Invoice() {
                                     </span>
                                   </td>
                                   <td
+                                    className="invoice-col-action"
                                     style={{
                                       ...baseCellStyle,
                                       textAlign: "center",
@@ -1189,41 +1231,28 @@ export default function Invoice() {
                         </small>
                       </div>
                       <div>
-                        <Pagination className="mb-0">
+                        {/* The /new-booking/hotel pager (pagination-modern) */}
+                        <Pagination className="mb-0 pagination-modern">
                           <Pagination.Prev
                             onClick={() =>
                               setCurrentPage((prev) => Math.max(1, prev - 1))
                             }
                             disabled={currentPage === 1 || isLoading}
                           />
-                          {Array.from(
-                            { length: totalPages },
-                            (_, i) => i + 1,
-                          ).map((pageNum) => {
-                            if (
-                              pageNum === 1 ||
-                              pageNum === totalPages ||
-                              (pageNum >= currentPage - 1 &&
-                                pageNum <= currentPage + 1)
-                            ) {
-                              return (
-                                <Pagination.Item
-                                  key={pageNum}
-                                  active={pageNum === currentPage}
-                                  onClick={() => setCurrentPage(pageNum)}
-                                  disabled={isLoading}
-                                >
-                                  {pageNum}
-                                </Pagination.Item>
-                              );
-                            } else if (
-                              pageNum === currentPage - 2 ||
-                              pageNum === currentPage + 2
-                            ) {
-                              return <Pagination.Ellipsis key={pageNum} />;
-                            }
-                            return null;
-                          })}
+                          {pageNumbers.map((n) =>
+                            typeof n === "number" ? (
+                              <Pagination.Item
+                                key={n}
+                                active={n === currentPage}
+                                onClick={() => setCurrentPage(n)}
+                                disabled={isLoading}
+                              >
+                                {n}
+                              </Pagination.Item>
+                            ) : (
+                              <Pagination.Ellipsis key={n} disabled />
+                            ),
+                          )}
                           <Pagination.Next
                             onClick={() =>
                               setCurrentPage((prev) =>

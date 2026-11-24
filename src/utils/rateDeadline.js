@@ -160,6 +160,162 @@ export const formatResolvedDeadline = (d) => {
   return `${day}, ${isExactDeadline(d) ? exactTimeLabel(d) : DEADLINE_TIME_EOD}`;
 };
 
+/** "1st", "2nd", "3rd", "4th" … "11th", "12th", "13th" … "21st", "22nd", "31st". */
+const ordinalDay = (n) => {
+  const lastTwo = n % 100;
+  if (lastTwo >= 11 && lastTwo <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+};
+
+/**
+ * When cancellation charges begin, for a resolved deadline Date. Used by the
+ * "Hotel Policies & Terms" popup on every hotel booking page so it reads the
+ * same deadline the page itself shows.
+ *
+ * A day deadline is free until 11:59 PM UAE on that day, so charges begin the
+ * NEXT day: deadline 8 Jun 2027 → "9th Jun 2027". An exact (RateHawk)
+ * deadline is the moment charges begin (passed from that minute), so it keeps
+ * its own day and time: "20th Dec 2026, 04:00 AM (UAE)". Null without a
+ * valid Date.
+ */
+export const chargesFromText = (deadline) => {
+  const d = chargesFromDate(deadline);
+  if (!d) return null;
+  const day = `${ordinalDay(d.getDate())} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  return isExactDeadline(deadline) ? `${day}, ${exactTimeLabel(deadline)}` : day;
+};
+
+/**
+ * When cancellation charges begin, as a Date: the day after a day deadline
+ * (at midnight), or an exact (RateHawk) deadline itself. Null without a
+ * valid Date.
+ */
+export const chargesFromDate = (deadline) => {
+  if (!(deadline instanceof Date) || Number.isNaN(deadline.getTime())) return null;
+  const d = new Date(deadline);
+  if (!isExactDeadline(deadline)) {
+    d.setDate(d.getDate() + 1);
+    d.setHours(0, 0, 0, 0);
+  }
+  return d;
+};
+
+/** "From 9th Jun 2027, cancellation charges will be applied", or null without a deadline. */
+export const chargesFromLine = (deadline) => {
+  const when = chargesFromText(deadline);
+  return when ? `From ${when}, cancellation charges will be applied` : null;
+};
+
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/**
+ * Every shape a supplier writes a day in, inside its policy text or its
+ * fromDate: Darina / ISO fromDates "2027-06-06[T00:00:00]", Atharva V2 and GRN
+ * "06 Jun 2027", the IWTX / X3 text generator "Jun 06, 2027", and the
+ * day-first forms Atharva and GoGlobal may send raw. Zero-padded shapes come
+ * before unpadded ones so "06 Jun 2027" is never read as "6 Jun 2027".
+ */
+const DAY_SHAPES = [
+  (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+  (d) => `${pad2(d.getDate())} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`,
+  (d) => `${MONTHS[d.getMonth()]} ${pad2(d.getDate())}, ${d.getFullYear()}`,
+  (d) => `${pad2(d.getDate())}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`,
+  (d) => `${pad2(d.getDate())}/${MONTHS[d.getMonth()]}/${d.getFullYear()}`,
+  (d) => `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`,
+  (d) => `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`,
+  (d) => `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`,
+  (d) => `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`,
+  (d) => `${d.getDate()}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`,
+  (d) => `${d.getDate()}/${MONTHS[d.getMonth()]}/${d.getFullYear()}`,
+  (d) => `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`,
+  (d) => `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`,
+];
+
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * `str` with its FIRST mention of the day `fromDay` rewritten as `toDay`, in
+ * the same shape it was written in (and upper case when it was). Null when
+ * `fromDay` is not mentioned in any known shape.
+ */
+const replaceDayInText = (str, fromDay, toDay) => {
+  const s = String(str ?? "");
+  for (const shape of DAY_SHAPES) {
+    const m = s.match(new RegExp(`(^|[^0-9])(${escapeRegExp(shape(fromDay))})(?![0-9])`, "i"));
+    if (m) {
+      const written = shape(toDay);
+      const out = /[a-z]/i.test(m[2]) && m[2] === m[2].toUpperCase() ? written.toUpperCase() : written;
+      const at = m.index + m[1].length;
+      return s.slice(0, at) + out + s.slice(at + m[2].length);
+    }
+  }
+  return null;
+};
+
+/** The policy row moved to start on `toDay`, or null when its dates can't all be rewritten. */
+const moveRowStart = (row, fromDay, toDay) => {
+  const fromDate = replaceDayInText(row.fromDate, fromDay, toDay);
+  if (fromDate == null) return null;
+  const text = row.policyText;
+  if (text == null || String(text).trim() === "") return { ...row, fromDate };
+  const policyText = replaceDayInText(text, fromDay, toDay);
+  if (policyText != null) return { ...row, fromDate, policyText };
+  // The text names a year but not this day in any known shape: rewriting only
+  // fromDate would leave the row's text and "Valid" line disagreeing.
+  if (/(^|[^0-9])(19|20)\d{2}(?![0-9])/.test(String(text))) return null;
+  return { ...row, fromDate };
+};
+
+/**
+ * Policy rows as the booking pages' "Hotel Policies & Terms" popup shows them:
+ * the first cancellation-charge band starts on the day charges begin
+ * (chargesFromDate of the page's `deadline`) instead of the supplier's own
+ * later day — "From 06 Jun 2027 to 15 Jun 2027: …" becomes "From 05 Jun 2027
+ * to 15 Jun 2027: …" under "From 5th Jun 2027, cancellation charges will be
+ * applied". Only the start day moves, in the row's text and fromDate alike;
+ * the end, the charge and later bands stay as the supplier sent them.
+ *
+ * A charge band is a row with a value above zero that is not an amendment
+ * row (Atharva lists those too). Every band starting on the earliest day
+ * moves. Rows stay as sent when the first band already starts on or before
+ * that day, when the deadline is an exact RateHawk time (no safety day, so
+ * its bands already start at the deadline), or when a row's dates can't all
+ * be rewritten.
+ */
+export const alignFirstChargeBand = (rows, deadline) => {
+  const list = Array.isArray(rows) ? rows : [];
+  if (isExactDeadline(deadline)) return list;
+  const target = chargesFromDate(deadline);
+  if (!target) return list;
+  const isCharge = (r) => Number(r?.value) > 0 && !/amendment/i.test(String(r?.policyText ?? ""));
+  const startDay = (r) => {
+    const d = parseSupplierDate(r?.fromDate);
+    if (!d || Number.isNaN(d.getTime())) return null;
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+  let first = null;
+  list.forEach((r) => {
+    const d = isCharge(r) ? startDay(r) : null;
+    if (d && (!first || d < first)) first = d;
+  });
+  if (!first || first <= target) return list;
+  return list.map((r) => {
+    const d = isCharge(r) ? startDay(r) : null;
+    if (!d || d.getTime() !== first.getTime()) return r;
+    return moveRowStart(r, first, target) || r;
+  });
+};
+
 /** Passed? Exact deadlines by the minute, day deadlines by the UAE day. */
 export const isResolvedDeadlinePassed = (d) =>
   isExactDeadline(d) ? isExactDeadlinePassed(d) : isDeadlinePassed(d);

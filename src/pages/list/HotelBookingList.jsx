@@ -34,6 +34,10 @@ import toast from "react-hot-toast";
 import RoomCountSummary from "../../components/RoomCountSummary";
 import { getPaginationItems } from "../../utils/paginationItems";
 import "../../styles/HotelBookingListModern.css";
+// .pagination-modern — the orange rounded pager used on /new-booking/hotel and
+// the report pages. Every rule in this stylesheet is namespaced under its own
+// class names, so importing it here changes nothing else on this page.
+import "../../styles/HotelSearch.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 // When the user has an active client-side filter (search or Check-in Date),
@@ -1162,6 +1166,26 @@ const HotelBookingList = ({
     [resetAllPages],
   );
 
+  // "Clear" next to the Check-in Date filter resets every filter on the
+  // page — search, Booking Type, Check-in Date and the Time Period month /
+  // year — back to their defaults, and returns to page 1. It is enabled as
+  // soon as any one of them is set (it used to clear only the date).
+  const hasActiveFilters =
+    Boolean((search || "").trim()) ||
+    status !== "all" ||
+    Boolean(checkInDateFilter) ||
+    Boolean(selectedMonth) ||
+    Boolean(selectedYear);
+
+  const handleClearFilters = useCallback(() => {
+    setSearch("");
+    setStatus("all");
+    setCheckInDateFilter("");
+    setSelectedMonth("");
+    setSelectedYear("");
+    resetAllPages();
+  }, [resetAllPages]);
+
   // Filter bookings based on search term and Check-in Date filter.
   const filteredBookings = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -1245,6 +1269,16 @@ const HotelBookingList = ({
     : totalPages > 0
       ? totalPages
       : Math.max(1, Math.ceil((totalEntries || 0) / currentPerPage));
+
+  // Page buttons, as on the report pages: always the first 3 and last 3
+  // pages, plus the current page and its neighbours; "…" fills each gap. A
+  // gap of a single page shows that page instead — an ellipsis there would
+  // hide nothing. 30 pages on page 1 → 1 2 3 … 28 29 30. Same shared helper
+  // the senior-citizen, package and MYOP lists use.
+  const pageNumbers = useMemo(
+    () => getPaginationItems(safeTotalPages, currentPage),
+    [safeTotalPages, currentPage],
+  );
 
   // Colour each "/"-separated segment of a confirmation status independently,
   // mirroring the booking detail view's StatusBadge so the list and the detail
@@ -1499,12 +1533,9 @@ const HotelBookingList = ({
                           <Button
                             variant="outline-secondary"
                             size="sm"
-                            onClick={() => {
-                              setCheckInDateFilter("");
-                              resetAllPages();
-                            }}
-                            disabled={!checkInDateFilter}
-                            aria-label="Clear check-in date filter"
+                            onClick={handleClearFilters}
+                            disabled={!hasActiveFilters}
+                            aria-label="Clear all filters"
                             style={{ fontSize: "0.85rem", height: "46px", whiteSpace: "nowrap" }}
                           >
                             Clear
@@ -2012,9 +2043,22 @@ const HotelBookingList = ({
                                     width: COLUMN_WIDTHS.bookingDetails,
                                   }}
                                 >
+                                  {/* On the dedicated 24-Hour page every row is
+                                      24-hour, so the "24H" badge is dropped and
+                                      the stay dates sit on their own line under
+                                      the hotel name. The regular list keeps the
+                                      badge and the inline layout. */}
                                   <div
-                                    className="d-flex align-items-center"
-                                    style={{ gap: "0.35rem", flexWrap: "wrap" }}
+                                    className={
+                                      force24HourOnly
+                                        ? "d-flex flex-column align-items-start"
+                                        : "d-flex align-items-center"
+                                    }
+                                    style={
+                                      force24HourOnly
+                                        ? { gap: "0.15rem" }
+                                        : { gap: "0.35rem", flexWrap: "wrap" }
+                                    }
                                   >
                                     <span
                                       className="fw-semibold text-dark"
@@ -2022,7 +2066,7 @@ const HotelBookingList = ({
                                     >
                                       {b.hotelName || "-"}
                                     </span>
-                                    {b.is24HourCheckin && (
+                                    {b.is24HourCheckin && !force24HourOnly && (
                                       <span
                                         className="badge bg-warning-subtle text-warning border border-warning-subtle"
                                         style={{ fontSize: "0.65rem", padding: "2px 6px" }}
@@ -2437,88 +2481,36 @@ const HotelBookingList = ({
                         ))}
                       </Form.Select>
                     </div>
-                    <Pagination className="mb-0">
+                    {/* The /new-booking/hotel pager (pagination-modern) */}
+                    <Pagination className="mb-0 pagination-modern">
                       <Pagination.Prev
                         disabled={currentPage === 1}
                         onClick={() =>
                           currentPage > 1 && handlePageChange(currentPage - 1)
                         }
-                        style={{
-                          cursor: currentPage === 1 ? "not-allowed" : "pointer",
-                          opacity: currentPage === 1 ? 0.5 : 1,
-                        }}
                       />
-                      {religiousOnly ? (
-                        // Religious Booking List only: first 3 … current ±1 …
-                        // last 3, the same page buttons as the senior-citizen,
-                        // package and MYOP lists. The regular hotel and
-                        // 24-hour lists keep the sliding window below.
-                        getPaginationItems(safeTotalPages, currentPage).map((item) =>
-                          typeof item === "number" ? (
-                            <Pagination.Item
-                              key={item}
-                              active={currentPage === item}
-                              onClick={() => handlePageChange(item)}
-                              style={{
-                                cursor: "pointer",
-                                minWidth: "38px",
-                                textAlign: "center",
-                              }}
-                            >
-                              {item}
-                            </Pagination.Item>
-                          ) : (
-                            <Pagination.Ellipsis key={item} disabled />
-                          ),
-                        )
-                      ) : (() => {
-                        // Sliding window: show at most 5 page tabs at a time,
-                        // centered on the current page. Prev/Next behavior is
-                        // unchanged and continues to move one page at a time,
-                        // shifting the window as needed (e.g. 1..5, 2..6, ...).
-                        const windowSize = 5;
-                        const startPage = Math.max(
-                          1,
-                          Math.min(
-                            currentPage - Math.floor(windowSize / 2),
-                            safeTotalPages - windowSize + 1,
-                          ),
-                        );
-                        const endPage = Math.min(
-                          safeTotalPages,
-                          startPage + windowSize - 1,
-                        );
-                        return Array.from(
-                          { length: endPage - startPage + 1 },
-                          (_, i) => startPage + i,
-                        ).map((pageNumber) => (
+                      {/* First 3 … current ±1 … last 3 on every list —
+                          regular, 24-hour and Religious — from the shared
+                          getPaginationItems helper (see pageNumbers). */}
+                      {pageNumbers.map((n) =>
+                        typeof n === "number" ? (
                           <Pagination.Item
-                            key={pageNumber}
-                            active={currentPage === pageNumber}
-                            onClick={() => handlePageChange(pageNumber)}
-                            style={{
-                              cursor: "pointer",
-                              minWidth: "38px",
-                              textAlign: "center",
-                            }}
+                            key={n}
+                            active={n === currentPage}
+                            onClick={() => handlePageChange(n)}
                           >
-                            {pageNumber}
+                            {n}
                           </Pagination.Item>
-                        ));
-                      })()}
+                        ) : (
+                          <Pagination.Ellipsis key={n} disabled />
+                        ),
+                      )}
                       <Pagination.Next
-                        disabled={currentPage === safeTotalPages}
+                        disabled={currentPage >= safeTotalPages}
                         onClick={() =>
                           currentPage < safeTotalPages &&
                           handlePageChange(currentPage + 1)
                         }
-                        style={{
-                          cursor:
-                            currentPage === safeTotalPages
-                              ? "not-allowed"
-                              : "pointer",
-                          opacity: currentPage === safeTotalPages ? 0.5 : 1,
-                        }}
                       />
                     </Pagination>
                   </div>

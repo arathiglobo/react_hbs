@@ -8,18 +8,114 @@ import {
   Form,
   Button,
   Table,
+  Modal,
   Pagination,
 } from "react-bootstrap";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import Agent from "../../components/filters/Agent";
 import Staff from "../../components/filters/Staff";
 import axiosInstance from "../../components/AxiosInstance";
-import Supplier from "../../components/filters/Supplier";
-import DestinationCity from "../../components/filters/DestinationCity";
+import chevronStyle from "../../components/filters/dropdownChevron";
 import { toast } from "react-hot-toast";
 import BackButton from "../../components/BackButton";
 import { isAgentLogin } from "../../utils/supplierDisplay";
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
+// .pagination-modern — the orange rounded pager used on /new-booking/hotel
+// and the other sales reports. Every rule in this stylesheet is namespaced
+// under its own class names, so importing it changes nothing else here.
+import "../../styles/HotelSearch.css";
+
+// Supplier filter for offline bookings. Offline line items store the id of a
+// supplier from the supplier master (/api/supplier — the list the offline
+// booking forms pick from), not one of the online API suppliers the shared
+// Supplier filter lists, so this report needs its own list. Same look and
+// behaviour as the shared filter: type to search, click to pick.
+function OfflineSupplierFilter({ value, onChange }) {
+  const [suppliers, setSuppliers] = useState([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    // The endpoint is paged; one large page loads the whole list.
+    axiosInstance
+      .get("/api/supplier", { params: { page: 0, limit: 1000 } })
+      .then((res) => setSuppliers(Array.isArray(res.data) ? res.data : []))
+      .catch((err) => console.error("Failed to fetch suppliers:", err));
+  }, []);
+
+  const selectedOption = suppliers.find(
+    (s) => String(s.supplierId) === String(value)
+  );
+
+  const filteredSuppliers = searchTerm
+    ? suppliers.filter((s) =>
+        (s.name || "").toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    : suppliers;
+
+  const close = () => {
+    setIsOpen(false);
+    setSearchTerm("");
+  };
+
+  return (
+    <Form.Group>
+      <Form.Label>Supplier</Form.Label>
+      <div className="position-relative">
+        <Form.Control
+          size="sm"
+          style={chevronStyle}
+          value={isOpen ? searchTerm : selectedOption?.name || ""}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            if (!isOpen) setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          placeholder="Select supplier"
+          autoComplete="off"
+        />
+
+        {isOpen && (
+          <>
+            <div
+              className="position-absolute w-100 bg-white border shadow-lg"
+              style={{ zIndex: 1050, maxHeight: "200px", overflowY: "auto", top: "100%" }}
+            >
+              {filteredSuppliers.length > 0 ? (
+                filteredSuppliers.map((s) => (
+                  <div
+                    key={s.supplierId}
+                    className="px-3 py-2"
+                    style={{ cursor: "pointer" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f8f9fa")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "white")}
+                    onClick={() => {
+                      onChange(s.supplierId);
+                      close();
+                    }}
+                  >
+                    {s.name}
+                  </div>
+                ))
+              ) : (
+                <div className="px-3 py-2 text-muted">No suppliers found</div>
+              )}
+            </div>
+
+            {/* Backdrop — a click outside closes the list */}
+            <div
+              className="position-fixed"
+              style={{ top: 0, left: 0, right: 0, bottom: 0, zIndex: 1040 }}
+              onClick={close}
+            />
+          </>
+        )}
+      </div>
+    </Form.Group>
+  );
+}
 
 export default function OfflineBookingDailySalesStatement() {
 
@@ -29,8 +125,12 @@ export default function OfflineBookingDailySalesStatement() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Server-side search filters (sent to /api/report/offline-daily-sales on
-  // Search). From/To Date filters the booking (sales) date, so the standard
-  // Booking Date range is not repeated; the Supplier dropdown already exists.
+  // Search). Only the filters that fit this report's columns are kept:
+  // Sales Date (Date), Agent (Agent Name), Staff (Booking Done By), Supplier
+  // (Supplier Name), Booking Reference (Reference Number / Invoice Number),
+  // Guest Name (customer in Booking Details), plus the booking date ranges.
+  // The supplier reference / service / city / branch / status /
+  // service-type filters were removed — no column shows them.
   const initialFilters = {
     // Sales Details
     fromDate: "",
@@ -47,19 +147,19 @@ export default function OfflineBookingDailySalesStatement() {
     reconfirmDateTo: "",
     cancelDateFrom: "",
     cancelDateTo: "",
-    bookingReference: "",
-    supplierReference: "",
-    city: "",
-    guestName: "",
-    serviceName: "",
-    branch: "",
-    status: "",
-    bookingType: "",
+    bookingReference: "", // reference number or invoice number
+    guestName: "",        // customer name
   };
   const [tempFilters, setTempFilters] = useState(initialFilters);
+  // Filters behind the rows on screen (set on Search / Reset), so the mailed
+  // report matches the table even if the inputs were edited afterwards
+  // without searching again.
+  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
 
-  // Branch dropdown options (distinct booking locations)
-  const [branchOptions, setBranchOptions] = useState([]);
+  // Mail dialog
+  const [showMailModal, setShowMailModal] = useState(false);
+  const [emailAddress, setEmailAddress] = useState("");
+  const [isSending, setIsSending] = useState(false);
 
   const updateFilter = (field, value) =>
     setTempFilters((prev) => ({ ...prev, [field]: value }));
@@ -99,29 +199,58 @@ export default function OfflineBookingDailySalesStatement() {
 
   useEffect(() => {
     fetchSales();
-
-    // Branch dropdown options come from the distinct booking locations
-    const fetchBranches = async () => {
-      try {
-        const response = await axiosInstance.get("/api/report/bookings/branches");
-        setBranchOptions(Array.isArray(response.data) ? response.data : []);
-      } catch (error) {
-        console.error("Branch options fetch error", error);
-      }
-    };
-    fetchBranches();
   }, []);
 
   const handleSearch = async () => {
     setCurrentPage(1);
+    setAppliedFilters(tempFilters);
     await fetchSales(tempFilters);
   };
 
   const handleReset = async () => {
     setTempFilters(initialFilters);
+    setAppliedFilters(initialFilters);
     setSearchQuery("");
     setCurrentPage(1);
     await fetchSales();
+  };
+
+  const closeMailModal = () => {
+    if (isSending) return;
+    setShowMailModal(false);
+  };
+
+  // The server re-runs the report with the filters behind the table (and
+  // the quick search), so the mail holds the same rows as the screen.
+  const handleSendEmail = async () => {
+    if (!emailAddress || !/^\S+@\S+\.\S+$/.test(emailAddress)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      const response = await axiosInstance.post("/api/reports/send-email", {
+        email: emailAddress.trim(),
+        reportType: "offlinedailysales",
+        filters: {
+          ...appliedFilters,
+          searchQuery,
+        },
+        recordCount: filteredsales.length,
+      });
+      if (response.data) {
+        const sentCount = response.data.recordCount ?? filteredsales.length;
+        toast.success(`Report with ${sentCount} record(s) sent successfully!`);
+        setShowMailModal(false);
+        setEmailAddress("");
+      }
+    } catch (error) {
+      console.error("Email send error:", error);
+      toast.error(error.response?.data?.message || "Failed to send mail");
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const formatDate = (value) => (value ? String(value).split("T")[0] : "_");
@@ -182,28 +311,46 @@ export default function OfflineBookingDailySalesStatement() {
     printWindow.print();
   };
 
-  const handleExcel = () => {
-    const headers = ['Sl.No', 'Date', 'Invoice No', ...(showSupplier ? ['Supplier'] : []), 'Agent', 'Booking By', 'Reference', 'Details', 'Selling Price',
-      ...(showCost ? ['Net Price', 'Profit'] : [])];
+  // Columns shared by the Excel and PDF exports (Supplier / Net Price /
+  // Profit are left out for agents, as on screen).
+  const exportHeaders = ['Sl.No', 'Date', 'Invoice No', ...(showSupplier ? ['Supplier'] : []), 'Agent', 'Booking By', 'Reference', 'Details', 'Selling Price',
+    ...(showCost ? ['Net Price', 'Profit'] : [])];
+  const exportRow = (s, index) => [
+    index + 1,
+    formatDate(s.date),
+    s.invoiceNumber,
+    ...(showSupplier ? [s.supplier] : []),
+    s.agent,
+    s.bookingBy,
+    s.reference,
+    s.details,
+    s.sellingPrice,
+    ...(showCost ? [s.netPrice, s.profit] : [])
+  ];
 
+  const handlePDF = () => {
+    // Landscape — the statement has up to 11 columns
+    const doc = new jsPDF({ orientation: "landscape" });
+    doc.text("Offline Booking Daily Sales Statement", 14, 15);
+    autoTable(doc, {
+      head: [exportHeaders],
+      body: filteredsales.map((s, index) =>
+        exportRow(s, index).map((value) => (value === null || value === undefined ? "" : String(value)))
+      ),
+      startY: 20,
+      styles: { fontSize: 8 },
+    });
+    doc.save("Offline Booking Daily Sales Statement.pdf");
+  };
+
+  const handleExcel = () => {
     // Create CSV content with proper escaping
     // csvCell neutralises text a spreadsheet would run as a formula.
     const escapeCSV = (value) => csvCell(value);
 
     const csvContent = [
-      headers.map(escapeCSV).join(','),
-      ...filteredsales.map((s, index) => [
-        index + 1,
-        formatDate(s.date),
-        s.invoiceNumber,
-        ...(showSupplier ? [s.supplier] : []),
-        s.agent,
-        s.bookingBy,
-        s.reference,
-        s.details,
-        s.sellingPrice,
-        ...(showCost ? [s.netPrice, s.profit] : [])
-      ].map(escapeCSV).join(','))
+      exportHeaders.map(escapeCSV).join(','),
+      ...filteredsales.map((s, index) => exportRow(s, index).map(escapeCSV).join(','))
     ].join('\n');
 
     // Add BOM for UTF-8 to ensure proper Excel encoding
@@ -243,6 +390,54 @@ export default function OfflineBookingDailySalesStatement() {
   const endIndex = useMemo(() => startIndex + itemsPerPage, [startIndex, itemsPerPage]);
   const currentSales = useMemo(() => filteredsales.slice(startIndex, endIndex), [filteredsales, startIndex, endIndex]);
 
+  // Page buttons, as on the other sales reports: always the first 3 and
+  // last 3 pages, plus the current page and its neighbours; "…" fills each
+  // gap. A gap of a single page shows that page instead — an ellipsis there
+  // would hide nothing. 30 pages on page 1 → 1 2 3 … 28 29 30.
+  const pageNumbers = useMemo(() => {
+    const EDGE_PAGES = 3;
+    const shown = new Set();
+    for (let i = 1; i <= Math.min(EDGE_PAGES, totalPages); i++) shown.add(i);
+    for (let i = Math.max(1, totalPages - EDGE_PAGES + 1); i <= totalPages; i++) shown.add(i);
+    for (let i = Math.max(1, currentPage - 1); i <= Math.min(totalPages, currentPage + 1); i++) {
+      shown.add(i);
+    }
+    const sorted = Array.from(shown).sort((a, b) => a - b);
+    const nums = [];
+    sorted.forEach((n, idx) => {
+      const prev = sorted[idx - 1];
+      if (prev !== undefined && n - prev === 2) nums.push(prev + 1);
+      else if (prev !== undefined && n - prev > 2) nums.push(`ellipsis-${prev}`);
+      nums.push(n);
+    });
+    return nums;
+  }, [totalPages, currentPage]);
+
+  // Columns in the results table (Supplier / Net Price / Profit are hidden
+  // from agents) — keeps the "No data" row spanning the full width.
+  const columnCount = 8 + (showSupplier ? 1 : 0) + (showCost ? 2 : 0);
+
+  // One labelled From / To date pair. Every filter column uses the same
+  // width, so the Booking Details and Sales Details rows line up.
+  // minWidth 0 lets the two inputs share their column instead of spilling
+  // into the next field (global CSS makes them wide); the slimmer right
+  // padding keeps "dd-mm-yyyy" and the calendar icon visible at that width.
+  const dateInputStyle = { minWidth: 0, paddingRight: "0.5rem" };
+  const renderDateRange = (label, fromKey, toKey) => (
+    <Form.Group className="mb-0">
+      <Form.Label className="small mb-2">{label}</Form.Label>
+      <div className="d-flex gap-2">
+        <Form.Control type="date" size="sm" title="From" style={dateInputStyle}
+          value={tempFilters[fromKey]}
+          onChange={(e) => updateFilter(fromKey, e.target.value)} />
+        <Form.Control type="date" size="sm" title="To" style={dateInputStyle}
+          value={tempFilters[toKey]}
+          onChange={(e) => updateFilter(toKey, e.target.value)} />
+      </div>
+    </Form.Group>
+  );
+  const filterCol = { xs: 12, md: 6, xxl: 3 };
+
   return (
     <div className="bg-light d-flex flex-column" style={{ minHeight: "100vh" }}>
       <TopBar />
@@ -256,227 +451,110 @@ export default function OfflineBookingDailySalesStatement() {
               <span className="fw-semibold">Offline Daily Sales Statement Report</span>
             </Card.Header>
 
-            {/* Filters Section */}
+            {/* Filters Section — Booking Details and Sales Details share one
+                4-column grid (2 per row below xxl), so the fields line up. */}
             <div className="p-4 bg-light border-bottom">
               <h6 className="fw-bold text-primary mb-3">Booking Details</h6>
               <Row className="align-items-end g-4 mb-4">
-
-                {/* Row 1 — Service / Cancellation Deadline / Reconfirm dates */}
-                <Col md={4}>
+                <Col {...filterCol}>
+                  {renderDateRange("Service Date", "serviceDateFrom", "serviceDateTo")}
+                </Col>
+                {/* <Col {...filterCol}>
+                  {renderDateRange("Cancellation Deadline Date", "deadlineDateFrom", "deadlineDateTo")}
+                </Col> */}
+                <Col {...filterCol}>
+                  {renderDateRange("Reconfirm Date", "reconfirmDateFrom", "reconfirmDateTo")}
+                </Col>
+                {/* <Col {...filterCol}>
+                  {renderDateRange("Cancel Date", "cancelDateFrom", "cancelDateTo")}
+                </Col> */}
+                <Col {...filterCol}>
                   <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Service Date</Form.Label>
-                    <div className="d-flex gap-2">
-                      <Form.Control type="date" size="sm" title="From"
-                        value={tempFilters.serviceDateFrom}
-                        onChange={(e) => updateFilter("serviceDateFrom", e.target.value)} />
-                      <Form.Control type="date" size="sm" title="To"
-                        value={tempFilters.serviceDateTo}
-                        onChange={(e) => updateFilter("serviceDateTo", e.target.value)} />
-                    </div>
+                    <Form.Label className="small mb-2">Booking Reference</Form.Label>
+                    <Form.Control size="sm" placeholder="Reference or invoice no."
+                      value={tempFilters.bookingReference}
+                      onChange={(e) => updateFilter("bookingReference", e.target.value)} />
                   </Form.Group>
                 </Col>
-                <Col md={4}>
+                <Col {...filterCol}>
                   <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
-                    <div className="d-flex gap-2">
-                      <Form.Control type="date" size="sm" title="From"
-                        value={tempFilters.deadlineDateFrom}
-                        onChange={(e) => updateFilter("deadlineDateFrom", e.target.value)} />
-                      <Form.Control type="date" size="sm" title="To"
-                        value={tempFilters.deadlineDateTo}
-                        onChange={(e) => updateFilter("deadlineDateTo", e.target.value)} />
-                    </div>
+                    <Form.Label className="small mb-2">Guest Name</Form.Label>
+                    <Form.Control size="sm" placeholder="Guest name"
+                      value={tempFilters.guestName}
+                      onChange={(e) => updateFilter("guestName", e.target.value)} />
                   </Form.Group>
                 </Col>
-                <Col md={4}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
-                    <div className="d-flex gap-2">
-                      <Form.Control type="date" size="sm" title="From"
-                        value={tempFilters.reconfirmDateFrom}
-                        onChange={(e) => updateFilter("reconfirmDateFrom", e.target.value)} />
-                      <Form.Control type="date" size="sm" title="To"
-                        value={tempFilters.reconfirmDateTo}
-                        onChange={(e) => updateFilter("reconfirmDateTo", e.target.value)} />
-                    </div>
-                  </Form.Group>
-                </Col>
-
-                {/* Row 2 — Cancel date */}
-                <Col md={4}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Cancel Date</Form.Label>
-                    <div className="d-flex gap-2">
-                      <Form.Control type="date" size="sm" title="From"
-                        value={tempFilters.cancelDateFrom}
-                        onChange={(e) => updateFilter("cancelDateFrom", e.target.value)} />
-                      <Form.Control type="date" size="sm" title="To"
-                        value={tempFilters.cancelDateTo}
-                        onChange={(e) => updateFilter("cancelDateTo", e.target.value)} />
-                    </div>
-                  </Form.Group>
-                </Col>
-                <Col md={8} />
-
-                {/* Row 3 — reference / guest text filters */}
-                <Col md={4}>
-                  <Form.Control size="sm" placeholder="Booking Reference"
-                    value={tempFilters.bookingReference}
-                    onChange={(e) => updateFilter("bookingReference", e.target.value)} />
-                </Col>
-                <Col md={4}>
-                  <Form.Control size="sm" placeholder="Supplier Reference No."
-                    value={tempFilters.supplierReference}
-                    onChange={(e) => updateFilter("supplierReference", e.target.value)} />
-                </Col>
-                <Col md={4}>
-                  <Form.Control size="sm" placeholder="Guest Name"
-                    value={tempFilters.guestName}
-                    onChange={(e) => updateFilter("guestName", e.target.value)} />
-                </Col>
-
-                {/* Row 4 — service / city / branch */}
-                <Col md={4}>
-                  <Form.Control size="sm" placeholder="Service Name"
-                    value={tempFilters.serviceName}
-                    onChange={(e) => updateFilter("serviceName", e.target.value)} />
-                </Col>
-                <Col md={4}>
-                  <DestinationCity
-                    value={tempFilters.city}
-                    onChange={(cityName) => updateFilter("city", cityName)}
-                  />
-                </Col>
-                <Col md={4}>
-                  <Form.Select size="sm"
-                    value={tempFilters.branch}
-                    onChange={(e) => updateFilter("branch", e.target.value)}>
-                    <option value="">Select Branch</option>
-                    {branchOptions.map((branch) => (
-                      <option key={branch} value={branch}>{branch}</option>
-                    ))}
-                  </Form.Select>
-                </Col>
-
-                {/* Row 5 — status / service type */}
-                <Col md={4}>
-                  <Form.Select size="sm"
-                    value={tempFilters.status}
-                    onChange={(e) => updateFilter("status", e.target.value)}>
-                    <option value="">ALL</option>
-                    <option value="REQUESTED">Requested</option>
-                    <option value="CONFIRMED">Confirmed</option>
-                    <option value="RECONFIRMED">ReConfirmed</option>
-                    <option value="SOLD_OUT">Sold Out</option>
-                    <option value="CANCELLED">Cancelled</option>
-                  </Form.Select>
-                </Col>
-                <Col md={4}>
-                  <Form.Select size="sm"
-                    value={tempFilters.bookingType}
-                    onChange={(e) => updateFilter("bookingType", e.target.value)}>
-                    <option value="">All Services</option>
-                    <option value="NORMAL">Normal</option>
-                    <option value="LAST_MINUTE">Last Minute</option>
-                  </Form.Select>
-                </Col>
-                <Col md={4} />
               </Row>
 
               <h6 className="fw-bold text-primary mb-3">Sales Details</h6>
               <Row className="align-items-end g-4">
-                <Col md={2}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control type="date" size="sm"
-                    value={tempFilters.fromDate}
-                    onChange={(e) => updateFilter("fromDate", e.target.value)} />
-                  </Form.Group>
-                </Col>
-                <Col md={2}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control type="date" size="sm"
-                    value={tempFilters.toDate}
-                    onChange={(e) => updateFilter("toDate", e.target.value)} />
-                  </Form.Group>
+                <Col {...filterCol}>
+                  {renderDateRange("Sales Date", "fromDate", "toDate")}
                 </Col>
                 {!isAgentRole && (
-                <Col md={3}>
-                 <Agent
-                 value={tempFilters.agentId}
-                 onChange={(id) => updateFilter("agentId", String(id))}/>
-                </Col>
+                  <Col {...filterCol}>
+                    <Agent
+                      value={tempFilters.agentId}
+                      onChange={(id) => updateFilter("agentId", String(id))} />
+                  </Col>
                 )}
-                <Col md={3}>
-                 <Staff
-                 value={tempFilters.staffId}
-                 onChange={(id) => updateFilter("staffId", String(id))}/>
+                <Col {...filterCol}>
+                  <Staff
+                    value={tempFilters.staffId}
+                    onChange={(id) => updateFilter("staffId", String(id))} />
                 </Col>
-                <Col md={2}>
-                  <Supplier
-                    value={tempFilters.supplierId}
-                    onChange={(id) => updateFilter("supplierId", String(id))}
-                  />
-                </Col>
-                <Col md={12} className="d-flex justify-content-end gap-2 mt-3">
-                  <Button variant="success" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
-                    <i className="fas fa-search me-1"></i>Search
-                  </Button>
-                  <Button variant="outline-secondary" size="sm" onClick={handleReset}>
-                    <i className="fas fa-undo me-1"></i>Reset
-                  </Button>
-                </Col>
+                {/* Supplier names are never shown to agents, so the
+                    filter (and its column) is left out for them. */}
+                {showSupplier && (
+                  <Col {...filterCol}>
+                    <OfflineSupplierFilter
+                      value={tempFilters.supplierId}
+                      onChange={(id) => updateFilter("supplierId", String(id))} />
+                  </Col>
+                )}
               </Row>
 
-              {/* Action Buttons */}
-              <Row className="mt-4">
-                <Col md={12} className="d-flex gap-2 justify-content-end">
+              {/* One line: quick search on the left; Search / Reset / Mail /
+                  Print / PDF / Excel on the right. Search and Reset are
+                  wider than the export buttons. */}
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-4">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e)=>setSearchQuery(e.target.value)}
+                  placeholder="search here"
+                  className="form-control form-control-sm"
+                  style={{ width: 200 }}
+                />
+                <div className="d-flex flex-wrap justify-content-end align-items-center gap-2">
+                  <Button variant="success" size="sm" className="px-4" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
+                    <i className="fas fa-search me-1"></i>Search
+                  </Button>
+                  <Button variant="outline-secondary" size="sm" className="px-4" onClick={handleReset}>
+                    <i className="fas fa-undo me-1"></i>Reset
+                  </Button>
+                  <Button variant="outline-primary" size="sm" onClick={() => setShowMailModal(true)}>
+                    <i className="fas fa-envelope me-1"></i>Mail
+                  </Button>
                   <Button variant="outline-secondary" size="sm" onClick={handlePrint}>
                     <i className="fas fa-print me-1"></i>Print
+                  </Button>
+                  <Button variant="outline-danger" size="sm" onClick={handlePDF}>
+                    <i className="fas fa-file-pdf me-1"></i>PDF
                   </Button>
                   <Button variant="outline-success" size="sm" onClick={handleExcel}>
                     <i className="fas fa-file-excel me-1"></i>Excel
                   </Button>
-                </Col>
-              </Row>
+                </div>
+              </div>
             </div>
 
             {/* Table Section */}
             <Card.Body className="p-0 mt-1">
-              {/* Display and Search Row */}
-              <div className="p-2 border-bottom">
-                <Row className="d-flex justify-content-between align-items-center">
-                  <Col md="auto">
-                    <span className="text-muted">Display</span>
-                    <Form.Select size="sm" className="d-inline-block ms-2" style={{width: '80px'}}
-                      value={itemsPerPage}
-                      onChange={(e)=>{setItemsPerPage(Number(e.target.value))
-                        setCurrentPage(1);
-                      }}>
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </Form.Select>
-                    <span className="text-muted ms-2">records</span>
-                  </Col>
-                  <Col md="auto">
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e)=>setSearchQuery(e.target.value)}
-                      placeholder="search here"
-                      className="form-control form-control-sm w-auto"
-                    />
-                  </Col>
-                </Row>
-              </div>
-
               <Table responsive hover striped className="mb-0 align-middle">
-                <thead>
+                <thead className="align-middle">
                   <tr>
-                    <th style={{ width: 100 }}>S/N</th>
+                    <th style={{ width: 60 }}>S/N</th>
                     <th>Date</th>
                     <th>Invoice Number</th>
                     {showSupplier && <th>Supplier Name</th>}
@@ -508,7 +586,7 @@ export default function OfflineBookingDailySalesStatement() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={showCost ? 11 : 9} className="text-center text-muted py-4">
+                      <td colSpan={columnCount} className="text-center text-muted py-4">
                         No data available in table
                       </td>
                     </tr>
@@ -516,49 +594,92 @@ export default function OfflineBookingDailySalesStatement() {
                 </tbody>
               </Table>
 
-              {/* Pagination */}
-              <div className="d-flex justify-content-between align-items-center p-3 border-top">
-                <div>
+              {/* Pagination — page size and entry count on the left */}
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 p-3 border-top">
+                <div className="d-flex flex-wrap align-items-center gap-3">
+                  <div className="d-flex align-items-center">
+                    <span className="text-muted">Display</span>
+                    <Form.Select size="sm" className="d-inline-block ms-2" style={{width: '80px'}}
+                      value={itemsPerPage}
+                      onChange={(e)=>{setItemsPerPage(Number(e.target.value))
+                        setCurrentPage(1);
+                      }}>
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </Form.Select>
+                    <span className="text-muted ms-2">records</span>
+                  </div>
                   <small className="text-muted">
                     Showing {filteredsales.length > 0 ? startIndex + 1 : 0} to {Math.min(endIndex, filteredsales.length)} of {filteredsales.length} entries
                   </small>
                 </div>
-                <div>
-                  <Pagination className="mb-0">
-                    <Pagination.Prev onClick={()=>setCurrentPage(prev=>Math.max(1,prev-1))}
-                      disabled={currentPage === 1}/>
-
-                    {Array.from({length:totalPages},(_,i)=>i+1).map((pageNum)=>{
-                      if(
-                        pageNum === 1||
-                        pageNum === totalPages||
-                        (pageNum >= currentPage -1 && pageNum <= currentPage+1)
-                      ){
-                        return(
-                          <Pagination.Item
-                          key={pageNum}
-                          active={pageNum === currentPage}
-                          onClick={()=>setCurrentPage(pageNum)}>
-                            {pageNum}
-                          </Pagination.Item>
-                        )
-                      }else if(
-                        pageNum === currentPage +2||
-                        pageNum === currentPage -2
-                      ){
-                        return <Pagination.Ellipsis key={pageNum}/>
-                      }
-                      return null;
-                    })}
-
-                    <Pagination.Next onClick={() => setCurrentPage(prev=>Math.min(totalPages,prev+1))}
-                      disabled={currentPage === totalPages || totalPages === 0}/>
-
-                  </Pagination>
-                </div>
+                {/* The /new-booking/hotel pager (pagination-modern) */}
+                <Pagination className="mb-0 pagination-modern">
+                  <Pagination.Prev
+                    disabled={currentPage === 1 || totalPages === 0}
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  />
+                  {pageNumbers.map((n) =>
+                    typeof n === "number" ? (
+                      <Pagination.Item
+                        key={n}
+                        active={n === currentPage}
+                        onClick={() => setCurrentPage(n)}
+                      >
+                        {n}
+                      </Pagination.Item>
+                    ) : (
+                      <Pagination.Ellipsis key={n} disabled />
+                    ),
+                  )}
+                  <Pagination.Next
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  />
+                </Pagination>
               </div>
             </Card.Body>
           </Card>
+
+          {/* Mail — sends the rows behind the table to one address */}
+          <Modal show={showMailModal} onHide={closeMailModal} centered>
+            <Modal.Header closeButton={!isSending}>
+              <Modal.Title>Send Report via Email</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Form onSubmit={(e) => { e.preventDefault(); handleSendEmail(); }}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Email Address<span className="text-danger">*</span></Form.Label>
+                  <Form.Control
+                    type="email"
+                    placeholder="enter recipient email address"
+                    value={emailAddress}
+                    onChange={(e) => setEmailAddress(e.target.value)}
+                    disabled={isSending}
+                  />
+                </Form.Group>
+              </Form>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" type="button" onClick={closeMailModal} disabled={isSending}>
+                Cancel
+              </Button>
+              <Button variant="success" type="button" onClick={handleSendEmail} disabled={isSending || !emailAddress}>
+                {isSending ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2"></span>
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-paper-plane me-1"></i>Send Email
+                  </>
+                )}
+              </Button>
+            </Modal.Footer>
+          </Modal>
         </main>
       </div>
     </div>

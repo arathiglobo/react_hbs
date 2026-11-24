@@ -29,6 +29,10 @@ import Topbar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
 import RoomCountSummary, { countRoomTypes } from "../../components/RoomCountSummary";
 import "../../styles/HotelBookingListModern.css";
+// .pagination-modern — the orange rounded pager used on /new-booking/hotel and
+// the report pages. Every rule in this stylesheet is namespaced under its own
+// class names, so importing it here changes nothing else on this page.
+import "../../styles/HotelSearch.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
@@ -51,29 +55,36 @@ const COLUMN_WIDTHS = {
   nights: "70px",
   total: "110px",
   paymentStatus: "110px",
-  status: "110px",
+  // Matches the hotel list's Notification column width so "ReConfirmed" /
+  // "On Request" stay on one line.
+  status: "120px",
   action: "70px",
 };
 
+// Status column — plain coloured text (no pill, no dot), the same look as the
+// Notification column on /booking-details/hotel-booking-list: green Confirmed
+// / ReConfirmed, orange On Request, red Cancelled. The hotel list renders
+// Cancelled at the smaller 0.72rem size, so `fontSize` overrides the 0.82rem
+// default per state.
 const STATUS_META = {
-  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
-  // On Request — orange pill, same palette the hotel + LM lists use for this
-  // state. Aliased under every spelling the backend has been seen to emit
+  CONFIRMED: { label: "Confirmed", color: "#06a301" },
+  COMPLETED: { label: "Completed", color: "#175cd3" },
+  PENDING:   { label: "Pending",   color: "#e67e22" },
+  CANCELLED: { label: "Cancelled", color: "#dc3545", fontSize: "0.72rem" },
+  // On Request — orange, same colour the hotel list uses for this state.
+  // Aliased under every spelling the backend has been seen to emit
   // (uppercase `ONREQUEST`, snake `ON_REQUEST`, spaced `On Request`,
   // `Requested`/`REQUESTED`) so the Status column never falls through to the
-  // unstyled raw-text branch of StatusPill for an on-request booking.
-  ONREQUEST:    { label: "On Request", bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
-  ON_REQUEST:   { label: "On Request", bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
-  "On Request": { label: "On Request", bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
-  REQUESTED:    { label: "Requested",  bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
-  Requested:    { label: "Requested",  bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
-  // ReConfirmed — green pill, same palette hotel + LM lists use.
-  RECONFIRMED:  { label: "ReConfirmed", bg: "#e7f6ec", color: "#06a301", dot: "#22c55e" },
-  ReConfirmed:  { label: "ReConfirmed", bg: "#e7f6ec", color: "#06a301", dot: "#22c55e" },
-  Reconfirmed:  { label: "ReConfirmed", bg: "#e7f6ec", color: "#06a301", dot: "#22c55e" },
+  // plain grey raw-text branch of StatusText for an on-request booking.
+  ONREQUEST:    { label: "On Request", color: "#e67e22" },
+  ON_REQUEST:   { label: "On Request", color: "#e67e22" },
+  "On Request": { label: "On Request", color: "#e67e22" },
+  REQUESTED:    { label: "Requested",  color: "#e67e22" },
+  Requested:    { label: "Requested",  color: "#e67e22" },
+  // ReConfirmed — green, same colour the hotel list uses.
+  RECONFIRMED:  { label: "ReConfirmed", color: "#06a301" },
+  ReConfirmed:  { label: "ReConfirmed", color: "#06a301" },
+  Reconfirmed:  { label: "ReConfirmed", color: "#06a301" },
 };
 
 // Resolve the Payment Status label from the booking's DISPLAYED status — same
@@ -180,35 +191,25 @@ const getRoomSummary = (booking) => {
   };
 };
 
-const StatusPill = ({ meta, raw }) => {
-  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
-  return (
-    <span
-      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
-      style={{
-        backgroundColor: meta.bg,
-        color: meta.color,
-        fontSize: "0.7rem",
-        fontWeight: 600,
-        lineHeight: 1,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {meta.dot && (
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            backgroundColor: meta.dot,
-            display: "inline-block",
-          }}
-        />
-      )}
-      {meta.label}
-    </span>
-  );
-};
+// Same span styling as the hotel list's Notification cell. An unmapped status
+// falls back to grey at 0.72rem, as the hotel list does.
+const StatusText = ({ meta, raw }) => (
+  <span
+    style={{
+      color: meta ? meta.color : "#6c757d",
+      padding: "0.32rem 0.6rem",
+      fontSize: meta?.fontSize || (meta ? "0.82rem" : "0.72rem"),
+      fontWeight: "600",
+      borderRadius: "0.375rem",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "0.35rem",
+      whiteSpace: "nowrap",
+    }}
+  >
+    {meta ? meta.label : raw || "-"}
+  </span>
+);
 
 // "dd/mm/yyyy" — same shape HotelBookingList uses in the table cells so
 // dates render identically across both pages.
@@ -425,6 +426,30 @@ export default function LongStayBookingList() {
   const displayEnd = hasResults
     ? Math.min(serialNumberBase + pageBookings.length, totalEntries)
     : 0;
+
+  // Page buttons, as on /booking-details/hotel-booking-list and the report
+  // pages: always the first 3 and last 3 pages, plus the current page and its
+  // neighbours; "…" fills each gap. A gap of a single page shows that page
+  // instead — an ellipsis there would hide nothing. 30 pages on page 1 →
+  // 1 2 3 … 28 29 30.
+  const pageNumbers = useMemo(() => {
+    const EDGE_PAGES = 3;
+    const shown = new Set();
+    for (let i = 1; i <= Math.min(EDGE_PAGES, safeTotalPages); i++) shown.add(i);
+    for (let i = Math.max(1, safeTotalPages - EDGE_PAGES + 1); i <= safeTotalPages; i++) shown.add(i);
+    for (let i = Math.max(1, currentPage - 1); i <= Math.min(safeTotalPages, currentPage + 1); i++) {
+      shown.add(i);
+    }
+    const sorted = Array.from(shown).sort((a, b) => a - b);
+    const nums = [];
+    sorted.forEach((n, idx) => {
+      const prev = sorted[idx - 1];
+      if (prev !== undefined && n - prev === 2) nums.push(prev + 1);
+      else if (prev !== undefined && n - prev > 2) nums.push(`ellipsis-${prev}`);
+      nums.push(n);
+    });
+    return nums;
+  }, [safeTotalPages, currentPage]);
 
   const baseCellStyle = {
     padding: "0.5rem 0.6rem",
@@ -803,7 +828,7 @@ export default function LongStayBookingList() {
                             // the roll-up `bookingStatus` column still reads
                             // "Confirmed" (the reconfirm write only stamps
                             // `confirmationStatus`). Prefer confirmationStatus
-                            // when it's ahead of bookingStatus so the list pill
+                            // when it's ahead of bookingStatus so the list status
                             // matches what the detail page shows — mirrors the
                             // same precedence getPaymentStatusLabel already uses.
                             const confNorm = String(b?.confirmationStatus || "")
@@ -1081,9 +1106,10 @@ export default function LongStayBookingList() {
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.status,
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
-                                  <StatusPill
+                                  <StatusText
                                     meta={sMeta}
                                     raw={effectiveStatus}
                                   />
@@ -1175,49 +1201,34 @@ export default function LongStayBookingList() {
                         ))}
                       </Form.Select>
                     </div>
-                    <Pagination className="mb-0">
+                    {/* The /new-booking/hotel pager (pagination-modern) —
+                        same as /booking-details/hotel-booking-list. */}
+                    <Pagination className="mb-0 pagination-modern">
                       <Pagination.Prev
                         disabled={currentPage === 1}
                         onClick={() =>
                           currentPage > 1 && setPage(currentPage - 1)
                         }
-                        style={{
-                          cursor:
-                            currentPage === 1 ? "not-allowed" : "pointer",
-                          opacity: currentPage === 1 ? 0.5 : 1,
-                        }}
                       />
-                      {Array.from(
-                        { length: safeTotalPages },
-                        (_, i) => i + 1,
-                      ).map((pageNumber) => (
-                        <Pagination.Item
-                          key={pageNumber}
-                          active={currentPage === pageNumber}
-                          onClick={() => setPage(pageNumber)}
-                          style={{
-                            cursor: "pointer",
-                            minWidth: "38px",
-                            textAlign: "center",
-                          }}
-                        >
-                          {pageNumber}
-                        </Pagination.Item>
-                      ))}
+                      {pageNumbers.map((n) =>
+                        typeof n === "number" ? (
+                          <Pagination.Item
+                            key={n}
+                            active={n === currentPage}
+                            onClick={() => setPage(n)}
+                          >
+                            {n}
+                          </Pagination.Item>
+                        ) : (
+                          <Pagination.Ellipsis key={n} disabled />
+                        ),
+                      )}
                       <Pagination.Next
-                        disabled={currentPage === safeTotalPages}
+                        disabled={currentPage >= safeTotalPages}
                         onClick={() =>
                           currentPage < safeTotalPages &&
                           setPage(currentPage + 1)
                         }
-                        style={{
-                          cursor:
-                            currentPage === safeTotalPages
-                              ? "not-allowed"
-                              : "pointer",
-                          opacity:
-                            currentPage === safeTotalPages ? 0.5 : 1,
-                        }}
                       />
                     </Pagination>
                   </div>

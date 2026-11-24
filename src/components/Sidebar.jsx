@@ -859,6 +859,14 @@ export function buildSidebarItems({ currentRole, hotelId, dashboardPath }) {
           label: "Refund Review",
           to: "/finance/refund-review",
         },
+        {
+          // CC Avenue payments staff must act on: paid but not booked,
+          // being verified, flagged. Seeded as fin_card_payments in the
+          // backend's MenuItemSeeder.
+          code: "fin_card_payments",
+          label: "Card Payments",
+          to: "/finance/card-payments",
+        },
       ],
     },
     // {
