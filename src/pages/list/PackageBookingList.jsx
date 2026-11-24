@@ -22,6 +22,7 @@ import {
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import { getPaginationItems } from "../../utils/paginationItems";
 import toast from "react-hot-toast";
 import { useFeatureFlag } from "../../config/FeatureFlagsContext";
 import { canSeeSupplierNames } from "../booking/packagebooking/supplierHotels";
@@ -962,20 +963,23 @@ const PackageBookingList = () => {
                           opacity: page === 1 ? 0.5 : 1,
                         }}
                       />
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                        (pageNumber) => (
+                      {/* First 3 … current ±1 … last 3 — shared helper. */}
+                      {getPaginationItems(totalPages, page).map((item) =>
+                        typeof item === "number" ? (
                           <Pagination.Item
-                            key={pageNumber}
-                            active={page === pageNumber}
-                            onClick={() => handlePageChange(pageNumber)}
+                            key={item}
+                            active={page === item}
+                            onClick={() => handlePageChange(item)}
                             style={{
                               cursor: "pointer",
                               minWidth: "38px",
                               textAlign: "center",
                             }}
                           >
-                            {pageNumber}
+                            {item}
                           </Pagination.Item>
+                        ) : (
+                          <Pagination.Ellipsis key={item} disabled />
                         ),
                       )}
                       <Pagination.Next

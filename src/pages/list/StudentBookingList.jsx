@@ -47,50 +47,26 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import RoomCountSummary from "../../components/RoomCountSummary";
+import { getPaginationItems } from "../../utils/paginationItems";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
+// Page size asked of the API while a filter is on, so the filter runs over
+// every booking instead of one server page — same value HotelBookingList
+// uses for its search mode.
+const SEARCH_ALL_PAGE_SIZE = 10000;
 
-// Shared status badge palette (same as LongStay/GovEmployee). Extra entries
-// cover the student Notification statuses that don't appear there.
-const STATUS_META = {
-  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  RECONFIRMED: { label: "ReConfirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  PENDING: { label: "Pending", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  NOTCONFIRMED: { label: "Not Confirmed", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  ONREQUEST: { label: "On Request", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
-};
-
-const StatusPill = ({ meta, raw }) => {
-  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
-  return (
-    <span
-      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
-      style={{
-        backgroundColor: meta.bg,
-        color: meta.color,
-        fontSize: "0.7rem",
-        fontWeight: 600,
-        lineHeight: 1,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {meta.dot && (
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            backgroundColor: meta.dot,
-            display: "inline-block",
-          }}
-        />
-      )}
-      {meta.label}
-    </span>
-  );
+// Notification cell text — plain coloured bold text with no background or
+// dot, the same look as the Notification column on
+// /booking-details/hotel-booking-list: Confirmed / ReConfirmed green,
+// On Request orange, Cancelled (incl. "ReConfirmed / Cancelled") and
+// Not Confirmed red. Green / orange at 0.82rem, red at 0.72rem, as there.
+// Keyed by compositeStatus().kind.
+const NOTIFICATION_TEXT = {
+  confirmed: { color: "#06a301", fontSize: "0.82rem" },
+  onrequest: { color: "#e67e22", fontSize: "0.82rem" },
+  cancelled: { color: "#dc3545", fontSize: "0.72rem" },
+  notconfirmed: { color: "#dc3545", fontSize: "0.72rem" },
 };
 
 // Column widths — soft hints for the auto-layout table (same as HotelBookingList).
@@ -274,10 +250,21 @@ export default function StudentBookingList() {
     }
   }, []);
 
+  // Booking Type, Month / Year and search are applied in the browser. While
+  // any of them is on, ask the API for every booking (one big page) and page
+  // the filtered rows here; otherwise the filter would only see the 10 rows
+  // of the current server page while the page buttons still counted every
+  // booking (e.g. "Jul" → 4 rows but 2 pages, and July bookings on server
+  // page 2 missing). With no filter the API pages as before.
+  const clientFilterActive =
+    bookingType !== "all" || !!selectedMonth || !!selectedYear || !!search.trim();
+  const serverPage = clientFilterActive ? 0 : page;
+  const serverSize = clientFilterActive ? SEARCH_ALL_PAGE_SIZE : size;
+
   const fetchPage = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page, size });
+      const params = new URLSearchParams({ page: serverPage, size: serverSize });
       if (agentId) params.append("agentId", agentId);
       const { data } = await axiosInstance.get(
         `/api/student-booking/list?${params.toString()}`
@@ -293,7 +280,7 @@ export default function StudentBookingList() {
   };
   useEffect(() => {
     fetchPage(); /* eslint-disable-next-line */
-  }, [page, size, agentId]);
+  }, [serverPage, serverSize, agentId]);
 
   // Composite status — a booking that was Confirmed and is later Cancelled
   // shows "Confirmed / Cancelled".
@@ -422,17 +409,23 @@ export default function StudentBookingList() {
     return list;
   }, [rows, bookingType, selectedMonth, selectedYear, search]);
 
-  const clientFilterActive =
-    bookingType !== "all" || !!selectedMonth || !!selectedYear || !!search.trim();
-  const currentPage = page + 1; // 1-based for display
-  const safeTotalPages = Math.max(1, totalPages || 1);
+  // Filter on: every booking was loaded, so the page count, the rows shown and
+  // the "Showing X to Y of Z" line all come from the filtered set. Filter off:
+  // the API already returned just this page, and its totals are used.
+  const safeTotalPages = clientFilterActive
+    ? Math.max(1, Math.ceil(filtered.length / size))
+    : Math.max(1, totalPages || 1);
+  // Typing in the search box doesn't reset the page, so keep it in range.
+  const pageIndex = Math.min(page, safeTotalPages - 1);
+  const currentPage = pageIndex + 1; // 1-based for display
+  const pageRows = clientFilterActive
+    ? filtered.slice(pageIndex * size, pageIndex * size + size)
+    : filtered;
   const totalEntries = clientFilterActive
     ? filtered.length
     : backendTotal || filtered.length;
-  const displayStart = filtered.length === 0 ? 0 : page * size + 1;
-  const displayEnd = clientFilterActive
-    ? filtered.length
-    : page * size + filtered.length;
+  const displayStart = pageRows.length === 0 ? 0 : pageIndex * size + 1;
+  const displayEnd = pageIndex * size + pageRows.length;
 
   const handlePageChange = (oneBased) => setPage(Math.max(0, oneBased - 1));
   const handlePageSizeChange = (n) => {
@@ -444,25 +437,14 @@ export default function StudentBookingList() {
   // Includes the No. of Rooms column.
   const colSpan = role === "admin" ? 14 : 13;
 
-  // Notification cell renderer — maps the composite student status onto the
-  // shared StatusPill badges so it matches the Hotel/LongStay skin. The page
-  // keeps its own "Confirmed / Cancelled" composite label.
+  // Notification cell renderer — the composite student status as plain
+  // coloured text (see NOTIFICATION_TEXT). The page keeps its own
+  // "ReConfirmed / Cancelled" composite label, which the Payment Status
+  // column also reads.
   const renderNotification = (b) => {
     const status = compositeStatus(b);
-    const metaKey =
-      status.kind === "confirmed"
-        ? "CONFIRMED"
-        : status.kind === "cancelled"
-        ? "CANCELLED"
-        : status.kind === "notconfirmed"
-        ? "NOTCONFIRMED"
-        : status.kind === "onrequest"
-        ? "ONREQUEST"
-        : null;
-    const meta = metaKey
-      ? { ...STATUS_META[metaKey], label: status.label }
-      : null;
-    if (!meta) {
+    const style = NOTIFICATION_TEXT[status.kind];
+    if (!style) {
       return (
         <span className="text-muted" style={{ fontSize: "0.8rem" }}>
           {status.label}
@@ -470,8 +452,18 @@ export default function StudentBookingList() {
       );
     }
     return (
-      <span className="d-inline-flex align-items-center gap-1">
-        <StatusPill meta={meta} raw={status.label} />
+      <span
+        className="d-inline-flex align-items-center"
+        style={{
+          color: style.color,
+          fontSize: style.fontSize,
+          fontWeight: 600,
+          padding: "0.32rem 0.6rem",
+          gap: "0.35rem",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {status.label}
         {status.kind === "notconfirmed" && (
           <FaExclamationCircle style={{ color: "#ff9800", fontSize: "15px" }} />
         )}
@@ -700,7 +692,7 @@ export default function StudentBookingList() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filtered.length === 0 ? (
+                        {pageRows.length === 0 ? (
                           <tr>
                             <td
                               colSpan={colSpan}
@@ -714,7 +706,7 @@ export default function StudentBookingList() {
                             </td>
                           </tr>
                         ) : (
-                          filtered.map((b, i) => {
+                          pageRows.map((b, i) => {
                             const names = getGuestNames(b);
                             const first = names[0] || "-";
                             const extra = Math.max(0, names.length - 1);
@@ -740,7 +732,7 @@ export default function StudentBookingList() {
                                     width: COLUMN_WIDTHS.sn,
                                   }}
                                 >
-                                  {page * size + i + 1}
+                                  {pageIndex * size + i + 1}
                                 </td>
                                 {role === "admin" && (
                                   <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.agentName }}>
@@ -954,7 +946,7 @@ export default function StudentBookingList() {
             </Card>
 
             {/* Pagination */}
-            {!loading && filtered.length > 0 && (
+            {!loading && pageRows.length > 0 && (
               <Card className="shadow-sm border-0 mt-3" style={{ borderRadius: "8px" }}>
                 <Card.Body className="py-3">
                   <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 hbl-pagination-bar">
@@ -980,7 +972,7 @@ export default function StudentBookingList() {
                         ))}
                       </Form.Select>
                     </div>
-                    {totalPages > 1 && (
+                    {safeTotalPages > 1 && (
                       <Pagination className="mb-0">
                         <Pagination.Prev
                           disabled={currentPage === 1}
@@ -990,16 +982,21 @@ export default function StudentBookingList() {
                             opacity: currentPage === 1 ? 0.5 : 1,
                           }}
                         />
-                        {Array.from({ length: safeTotalPages }, (_, i) => i + 1).map((pageNumber) => (
-                          <Pagination.Item
-                            key={pageNumber}
-                            active={currentPage === pageNumber}
-                            onClick={() => handlePageChange(pageNumber)}
-                            style={{ cursor: "pointer", minWidth: "38px", textAlign: "center" }}
-                          >
-                            {pageNumber}
-                          </Pagination.Item>
-                        ))}
+                        {/* First 3 … current ±1 … last 3 — shared helper. */}
+                        {getPaginationItems(safeTotalPages, currentPage).map((item) =>
+                          typeof item === "number" ? (
+                            <Pagination.Item
+                              key={item}
+                              active={currentPage === item}
+                              onClick={() => handlePageChange(item)}
+                              style={{ cursor: "pointer", minWidth: "38px", textAlign: "center" }}
+                            >
+                              {item}
+                            </Pagination.Item>
+                          ) : (
+                            <Pagination.Ellipsis key={item} disabled />
+                          ),
+                        )}
                         <Pagination.Next
                           disabled={currentPage === safeTotalPages}
                           onClick={() =>

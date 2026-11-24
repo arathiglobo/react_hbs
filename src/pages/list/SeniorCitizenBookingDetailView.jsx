@@ -444,10 +444,14 @@ export default function SeniorCitizenBookingDetailView() {
 
   // For a cancelled booking the doc variant (final vs proforma) and whether
   // Agent Reference / Confirmation No. can be added are governed by the
-  // status the booking held BEFORE cancellation. Senior-citizen backend may
-  // not expose cancelledFromStatus; missing values keep these branches
-  // inert.
-  const priorStatus = String(booking?.cancelledFromStatus || "")
+  // status the booking held BEFORE cancellation — same rule as
+  // BookingDetailedView. The senior-citizen backend does not send
+  // cancelledFromStatus: its cancel only flips `cancelled` and KEEPS the prior
+  // confirmationStatus (SeniorCitizenBookingService.cancelBooking), so that
+  // stored status already is the pre-cancellation state.
+  const priorStatus = String(
+    booking?.cancelledFromStatus || booking?.confirmationStatus || "",
+  )
     .replace(/\s+/g, "")
     .toUpperCase();
   const cancelledShowsFinalDocs =
@@ -1526,18 +1530,21 @@ export default function SeniorCitizenBookingDetailView() {
                     the CONFIRM/RECONFIRM split (driven by isOnRequestPending),
                     Proforma vs final docs (driven by showsFinalDocs), and
                     Agent Reference / Confirmation No. guards. Cancelled
-                    bookings drop CANCEL and CONFIRM/RECONFIRM but keep
-                    every applicable read-only / docs action. */}
+                    bookings show the same set as a cancelled hotel booking:
+                    no ADD NEW ITEM / CANCEL / CONFIRM / RECONFIRM, and only
+                    the INVOICE (or the Proforma pair) for docs. */}
                 <div style={{ marginBottom: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    style={BTN_PRIMARY}
-                    onClick={() => {
-                      setSelectedAddItemType(ADD_NEW_ITEM_TYPES[0].key);
-                      setShowAddItemModal(true);
-                    }}
-                  >
-                    ADD NEW ITEM
-                  </button>
+                  {!isCancelled && (
+                    <button
+                      style={BTN_PRIMARY}
+                      onClick={() => {
+                        setSelectedAddItemType(ADD_NEW_ITEM_TYPES[0].key);
+                        setShowAddItemModal(true);
+                      }}
+                    >
+                      ADD NEW ITEM
+                    </button>
+                  )}
 
                   {!isCancelled && (
                     <button
@@ -1624,25 +1631,19 @@ export default function SeniorCitizenBookingDetailView() {
                     </>
                   )}
 
-                  {/* Cancelled booking docs: pick the final or proforma pair
-                      based on the pre-cancellation status. */}
+                  {/* Cancelled booking docs — keyed off the pre-cancellation
+                      status, as in BookingDetailedView. A booking that was
+                      ReConfirmed/Completed keeps only the INVOICE (the final
+                      Voucher is hidden once cancelled); otherwise the
+                      Proforma pair. */}
                   {isCancelled && cancelledShowsFinalDocs && (
-                    <>
-                      <button
-                        style={BTN_INFO}
-                        disabled={generatingDocType === "VOUCHER"}
-                        onClick={() => handleDocument("VOUCHER", "Voucher")}
-                      >
-                        {generatingDocType === "VOUCHER" ? "GENERATING..." : "VOUCHER"}
-                      </button>
-                      <button
-                        style={BTN_INFO}
-                        disabled={generatingDocType === "COMPLETED"}
-                        onClick={() => handleDocument("COMPLETED", "Invoice")}
-                      >
-                        {generatingDocType === "COMPLETED" ? "GENERATING..." : "INVOICE"}
-                      </button>
-                    </>
+                    <button
+                      style={BTN_INFO}
+                      disabled={generatingDocType === "COMPLETED"}
+                      onClick={() => handleDocument("COMPLETED", "Invoice")}
+                    >
+                      {generatingDocType === "COMPLETED" ? "GENERATING..." : "INVOICE"}
+                    </button>
                   )}
                   {isCancelled && !cancelledShowsFinalDocs && (
                     <>

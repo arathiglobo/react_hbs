@@ -32,6 +32,7 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import RoomCountSummary from "../../components/RoomCountSummary";
+import { getPaginationItems } from "../../utils/paginationItems";
 import "../../styles/HotelBookingListModern.css";
 // .pagination-modern — the orange rounded pager used on /new-booking/hotel and
 // the report pages. Every rule in this stylesheet is namespaced under its own
@@ -336,9 +337,17 @@ const HotelBookingList = ({
   // we fetch the entire dataset for the active Booking Type and let the
   // client-side filter run across everything, so a search isn't limited to
   // the rows currently on screen.
-  const isClientFiltering = Boolean(
-    (search || "").trim() || (checkInDateFilter || "").trim(),
-  );
+  //
+  // The Religious Booking List (religiousOnly) is always in this mode. The API
+  // has no religious filter, so paging on the server and keeping only the
+  // religious rows of each page gave wrong totals and empty pages (1 entry
+  // spread over 5 page buttons). Loading the whole bucket and paging the
+  // religious rows in the browser makes the count, "Showing X to Y of Z" and
+  // the page buttons come from religious rows alone. The regular hotel and
+  // 24-hour lists (religiousOnly false) are unaffected.
+  const isClientFiltering =
+    religiousOnly ||
+    Boolean((search || "").trim() || (checkInDateFilter || "").trim());
   const statusOptions = useMemo(
     () => [
       { value: "all", label: "All" },
@@ -1042,10 +1051,10 @@ const HotelBookingList = ({
       !!(b && (b.religiousBooking || b.isReligiousBooking || b.IsReligiousBooking));
 
     if (religiousOnly) {
-      // Religious Booking List: keep ONLY religious rows. Pagination is
-      // still server-side today (no is_religious_booking filter on the
-      // API), so the client-side filter is both the primary gate and the
-      // safety net. Totals reflect the filtered visible count.
+      // Religious Booking List: keep ONLY religious rows. The API has no
+      // religious filter, so this page always loads the whole bucket
+      // (isClientFiltering is true for religiousOnly) and pages the
+      // religious rows in the browser — see safeTotalPages / displayedBookings.
       const filtered = (currentBookings || []).filter(isRel);
       setBookings(filtered);
       setTotalPages(paginationMeta.totalPages || 0);
@@ -1264,25 +1273,12 @@ const HotelBookingList = ({
   // Page buttons, as on the report pages: always the first 3 and last 3
   // pages, plus the current page and its neighbours; "…" fills each gap. A
   // gap of a single page shows that page instead — an ellipsis there would
-  // hide nothing. 30 pages on page 1 → 1 2 3 … 28 29 30.
-  const pageNumbers = useMemo(() => {
-    const EDGE_PAGES = 3;
-    const shown = new Set();
-    for (let i = 1; i <= Math.min(EDGE_PAGES, safeTotalPages); i++) shown.add(i);
-    for (let i = Math.max(1, safeTotalPages - EDGE_PAGES + 1); i <= safeTotalPages; i++) shown.add(i);
-    for (let i = Math.max(1, currentPage - 1); i <= Math.min(safeTotalPages, currentPage + 1); i++) {
-      shown.add(i);
-    }
-    const sorted = Array.from(shown).sort((a, b) => a - b);
-    const nums = [];
-    sorted.forEach((n, idx) => {
-      const prev = sorted[idx - 1];
-      if (prev !== undefined && n - prev === 2) nums.push(prev + 1);
-      else if (prev !== undefined && n - prev > 2) nums.push(`ellipsis-${prev}`);
-      nums.push(n);
-    });
-    return nums;
-  }, [safeTotalPages, currentPage]);
+  // hide nothing. 30 pages on page 1 → 1 2 3 … 28 29 30. Same shared helper
+  // the senior-citizen, package and MYOP lists use.
+  const pageNumbers = useMemo(
+    () => getPaginationItems(safeTotalPages, currentPage),
+    [safeTotalPages, currentPage],
+  );
 
   // Colour each "/"-separated segment of a confirmation status independently,
   // mirroring the booking detail view's StatusBadge so the list and the detail
@@ -2493,6 +2489,9 @@ const HotelBookingList = ({
                           currentPage > 1 && handlePageChange(currentPage - 1)
                         }
                       />
+                      {/* First 3 … current ±1 … last 3 on every list —
+                          regular, 24-hour and Religious — from the shared
+                          getPaginationItems helper (see pageNumbers). */}
                       {pageNumbers.map((n) =>
                         typeof n === "number" ? (
                           <Pagination.Item

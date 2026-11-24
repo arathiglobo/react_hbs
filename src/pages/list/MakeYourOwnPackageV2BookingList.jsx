@@ -24,6 +24,7 @@ import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
 import RoomCountSummary, { countRoomTypes } from "../../components/RoomCountSummary";
+import { getPaginationItems } from "../../utils/paginationItems";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -49,47 +50,37 @@ const COLUMN_WIDTHS = {
   action: "70px",
 };
 
-// Reused from LongStayBookingList; mixed-case keys cover the Make Your
-// Own Package V2 backend which stores statuses like "On Request".
-const STATUS_META = {
-  CONFIRMED:    { label: "Confirmed",   bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  Confirmed:    { label: "Confirmed",   bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  COMPLETED:    { label: "Completed",   bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  Completed:    { label: "Completed",   bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  PENDING:      { label: "Pending",     bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  "On Request": { label: "On Request",  bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  Reconfirmed:  { label: "Reconfirmed", bg: "#eef2ff", color: "#3538cd", dot: "#6366f1" },
-  Invoiced:     { label: "Invoiced",    bg: "#eff6ff", color: "#1d4ed8", dot: "#3b82f6" },
-  Failed:       { label: "Failed",      bg: "#f3f4f6", color: "#475467", dot: "#98a2b3" },
-  CANCELLED:    { label: "Cancelled",   bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
-  Cancelled:    { label: "Cancelled",   bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+// Status cell — plain coloured bold text with no background or dot, the same
+// look as the Notification column on /booking-details/hotel-booking-list:
+// Confirmed / Reconfirmed green, On Request / Pending orange, Cancelled red.
+// Completed / Invoiced (states the hotel list doesn't have) stay blue and
+// Failed grey. Keys are matched case-insensitively with spaces ignored, so
+// "CONFIRMED", "On Request" and "onrequest" all resolve.
+const STATUS_TEXT = {
+  confirmed:   { label: "Confirmed",   color: "#06a301", large: true },
+  reconfirmed: { label: "Reconfirmed", color: "#06a301", large: true },
+  completed:   { label: "Completed",   color: "#175cd3", large: true },
+  invoiced:    { label: "Invoiced",    color: "#1d4ed8", large: true },
+  onrequest:   { label: "On Request",  color: "#e67e22", large: true },
+  pending:     { label: "Pending",     color: "#e67e22", large: true },
+  failed:      { label: "Failed",      color: "#6c757d", large: false },
+  cancelled:   { label: "Cancelled",   color: "#dc3545", large: false },
 };
 
-const StatusPill = ({ meta, raw }) => {
+const StatusText = ({ raw }) => {
+  const meta = STATUS_TEXT[String(raw ?? "").replace(/[\s_-]+/g, "").toLowerCase()];
   if (!meta) return <span className="text-muted">{raw || "-"}</span>;
   return (
     <span
-      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
       style={{
-        backgroundColor: meta.bg,
         color: meta.color,
-        fontSize: "0.7rem",
+        padding: "0.32rem 0.6rem",
+        // Hotel list sizes: green / orange labels at 0.82rem, the rest 0.72rem.
+        fontSize: meta.large ? "0.82rem" : "0.72rem",
         fontWeight: 600,
-        lineHeight: 1,
         whiteSpace: "nowrap",
       }}
     >
-      {meta.dot && (
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            backgroundColor: meta.dot,
-            display: "inline-block",
-          }}
-        />
-      )}
       {meta.label}
     </span>
   );
@@ -597,15 +588,6 @@ const MakeYourOwnPackageV2BookingList = () => {
                             const rawStatus = b.isCancelled
                               ? "Cancelled"
                               : b.bookingStatus || "Confirmed";
-                            const sMeta =
-                              STATUS_META[rawStatus] ||
-                              STATUS_META[
-                                Object.keys(STATUS_META).find(
-                                  (k) =>
-                                    k.toLowerCase() ===
-                                    String(rawStatus).toLowerCase(),
-                                )
-                              ];
                             const customerName =
                               [
                                 b.salutation,
@@ -757,9 +739,10 @@ const MakeYourOwnPackageV2BookingList = () => {
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.status,
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
-                                  <StatusPill meta={sMeta} raw={rawStatus} />
+                                  <StatusText raw={rawStatus} />
                                 </td>
                                 <td
                                   style={{
@@ -868,23 +851,25 @@ const MakeYourOwnPackageV2BookingList = () => {
                           opacity: currentPage === 1 ? 0.5 : 1,
                         }}
                       />
-                      {Array.from(
-                        { length: safeTotalPages },
-                        (_, i) => i + 1,
-                      ).map((pageNumber) => (
-                        <Pagination.Item
-                          key={pageNumber}
-                          active={currentPage === pageNumber}
-                          onClick={() => setPage(pageNumber)}
-                          style={{
-                            cursor: "pointer",
-                            minWidth: "38px",
-                            textAlign: "center",
-                          }}
-                        >
-                          {pageNumber}
-                        </Pagination.Item>
-                      ))}
+                      {/* First 3 … current ±1 … last 3 — shared helper. */}
+                      {getPaginationItems(safeTotalPages, currentPage).map((item) =>
+                        typeof item === "number" ? (
+                          <Pagination.Item
+                            key={item}
+                            active={currentPage === item}
+                            onClick={() => setPage(item)}
+                            style={{
+                              cursor: "pointer",
+                              minWidth: "38px",
+                              textAlign: "center",
+                            }}
+                          >
+                            {item}
+                          </Pagination.Item>
+                        ) : (
+                          <Pagination.Ellipsis key={item} disabled />
+                        ),
+                      )}
                       <Pagination.Next
                         disabled={currentPage === safeTotalPages}
                         onClick={() =>

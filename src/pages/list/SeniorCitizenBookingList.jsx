@@ -6,10 +6,10 @@
  *   - Title + search (left) | Time Period card (right)
  *   - Booking Type card (full-width row)
  *   - Bordered, hover table with shared baseHeaderStyle / baseCellStyle
- *   - StatusPill status badges + plain blue FaEye action
+ *   - Hotel-list style Payment Status / Status text + plain blue FaEye action
  *   - Card-style pagination footer ("Showing X to Y of Z entries")
  *
- * BookingType + Time-Period filtering is applied client-side over the rows
+ * BookingType, Check-in Date and Time-Period filtering is applied client-side over the rows
  * returned by GET /api/senior-citizen-booking/list. Fetch URL, axios,
  * role/userId gating, the Customers modal and the navigate target are all
  * unchanged from the original page.
@@ -45,9 +45,14 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import RoomCountSummary from "../../components/RoomCountSummary";
+import { getPaginationItems } from "../../utils/paginationItems";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
+// Page size asked of the API while a filter is on, so the filter runs over
+// every booking instead of one server page — same value HotelBookingList
+// uses for its search mode.
+const SEARCH_ALL_PAGE_SIZE = 10000;
 
 // Column-width hints kept in sync with HotelBookingList / the siblings so
 // the pages line up visually under the shared hbl-modern skin.
@@ -72,17 +77,14 @@ const COLUMN_WIDTHS = {
   action: "70px",
 };
 
-// Shared status meta (same colour language as the sibling lists). The
-// senior-citizen flow carries a couple of extra states (Not Confirmed and
-// the composite "Confirmed / Cancelled"), so those are added here.
-const STATUS_META = {
-  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  RECONFIRMED: { label: "ReConfirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  PENDING: { label: "Pending", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  NOTCONFIRMED: { label: "Not Confirmed", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  ONREQUEST: { label: "On Request", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+// Status-cell text colours — same palette as the Notification column on
+// /booking-details/hotel-booking-list: Confirmed / ReConfirmed green,
+// On Request orange, Cancelled / Not Confirmed red, anything else grey.
+const STATUS_COLORS = {
+  green: "#06a301",
+  orange: "#e67e22",
+  red: "#dc3545",
+  grey: "#6c757d",
 };
 
 // BookingType dropdown options — the shared seven-option set. Senior-citizen
@@ -144,22 +146,21 @@ const getPaymentModeLabel = (booking) => {
 // reached ReConfirmed was paid, one that stopped at On Request / Confirmed
 // never was.
 //
-// This takes the label built by `statusMetaFor` — the same value the Status cell
-// renders — so the two columns can never disagree. That label is all that is
-// needed: the senior-citizen list row carries no `reconfirmation` /
-// `cancelledFromStatus` field, but statusMetaFor already folds both the On
-// Request chain and the pre-cancellation state into the label itself
-// ("On Request/Confirmed / Cancelled", "ReConfirmed / Cancelled"), which is
-// exactly what the segment split below reads.
-const getPaymentStatusLabel = (displayStatus) => {
-  const segments = String(displayStatus || "")
+// This takes the `history` chain built by `resolveStatus` — not the Status
+// cell's display label, which collapses every cancellation to a bare
+// "Cancelled" exactly like the hotel list. The senior-citizen list row carries
+// no `cancelledFromStatus` field, so the history chain ("On Request /
+// Cancelled", "Confirmed / Cancelled", "ReConfirmed / Cancelled") is what
+// preserves the pre-cancellation state the segment split below reads.
+const getPaymentStatusLabel = (statusHistory) => {
+  const segments = String(statusHistory || "")
     .split("/")
     .map((seg) => seg.replace(/\s+/g, "").toLowerCase())
     .filter(Boolean);
   if (segments.length === 0) return "-";
 
   // Cancelled histories are settled by what the booking reached BEFORE the
-  // cancellation, so check this ahead of everything else — statusMetaFor puts
+  // cancellation, so check this ahead of everything else — resolveStatus puts
   // "Cancelled" last in the compound, and only a ReConfirmed history was paid.
   const latest = segments[segments.length - 1];
   if (latest === "cancelled" || latest === "canceled") {
@@ -168,7 +169,7 @@ const getPaymentStatusLabel = (displayStatus) => {
 
   // On Request → Payment Pending. Covers both "On Request" and, after step-1
   // Confirm, "On Request/Confirmed". A reconfirmed booking never carries the
-  // On Request chain (see statusMetaFor), so it falls through to "Paid".
+  // On Request chain (see resolveStatus), so it falls through to "Paid".
   if (segments.includes("onrequest")) return "Payment Pending";
 
   // Collapse a confirm-history compound ("Confirmed / ReConfirmed") to its
@@ -191,32 +192,29 @@ const getGuestNames = (booking) => {
   return booking?.customerName ? [booking.customerName] : [];
 };
 
-const StatusPill = ({ meta, raw }) => {
-  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
+// Status cell text — plain coloured bold text, same look as the Notification
+// cell on /booking-details/hotel-booking-list. Confirmed / ReConfirmed /
+// On Request render at the larger 0.82rem size; Cancelled / Not Confirmed /
+// anything else at the smaller 0.72rem size, as the hotel list does.
+const StatusText = ({ status, showWarning }) => {
+  const large = status.tone === "green" || status.tone === "orange";
   return (
     <span
-      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
+      className="d-inline-flex align-items-center"
       style={{
-        backgroundColor: meta.bg,
-        color: meta.color,
-        fontSize: "0.7rem",
-        fontWeight: 600,
-        lineHeight: 1,
+        color: STATUS_COLORS[status.tone] || STATUS_COLORS.grey,
+        padding: "0.32rem 0.6rem",
+        fontSize: large ? "0.82rem" : "0.72rem",
+        fontWeight: "600",
+        borderRadius: "0.375rem",
+        gap: "0.35rem",
         whiteSpace: "nowrap",
       }}
     >
-      {meta.dot && (
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            backgroundColor: meta.dot,
-            display: "inline-block",
-          }}
-        />
+      {status.label}
+      {showWarning && (
+        <FaExclamationCircle style={{ color: "#ff9800", fontSize: "15px" }} />
       )}
-      {meta.label}
     </span>
   );
 };
@@ -254,6 +252,7 @@ export default function SeniorCitizenBookingList() {
   const [bookingType, setBookingType] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
+  const [checkInDateFilter, setCheckInDateFilter] = useState("");
 
   const [role, setRole] = useState(
     (sessionStorage.getItem("currentActiveRole") || "").toLowerCase()
@@ -275,10 +274,24 @@ export default function SeniorCitizenBookingList() {
     }
   }, []);
 
+  // Booking Type, Check-in Date, Month / Year and search are applied in the
+  // browser. While any of them is on, ask the API for every booking (one big
+  // page) and page the filtered rows here; otherwise the filter would only
+  // see the rows of the current server page while the page buttons still
+  // counted every booking. With no filter the API pages as before.
+  const clientFilterActive =
+    bookingType !== "all" ||
+    !!checkInDateFilter ||
+    !!selectedMonth ||
+    !!selectedYear ||
+    !!search.trim();
+  const serverPage = clientFilterActive ? 0 : page;
+  const serverSize = clientFilterActive ? SEARCH_ALL_PAGE_SIZE : size;
+
   const fetchPage = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page, size });
+      const params = new URLSearchParams({ page: serverPage, size: serverSize });
       if (agentId) params.append("agentId", agentId);
       const { data } = await axiosInstance.get(
         `/api/senior-citizen-booking/list?${params.toString()}`
@@ -294,13 +307,33 @@ export default function SeniorCitizenBookingList() {
   };
   useEffect(() => {
     fetchPage(); /* eslint-disable-next-line */
-  }, [page, size, agentId]);
+  }, [serverPage, serverSize, agentId]);
 
-  // Composite status — a booking that was Confirmed and is later Cancelled
-  // shows "Confirmed / Cancelled". Returns a StatusPill-ready meta plus the
-  // raw label for fallback.
-  const statusMetaFor = (b) => {
-    const raw = String(b?.confirmationStatus || "").trim();
+  // Resolves a row's status into:
+  //   label   — what the Status cell shows. Mirrors the hotel list's
+  //             Notification cell: a cancelled booking reads just "Cancelled"
+  //             whatever it had reached before.
+  //   tone    — colour key into STATUS_COLORS.
+  //   history — the full chain ("Confirmed / Cancelled", "ReConfirmed /
+  //             Cancelled", "On Request / Cancelled") that the Payment Status
+  //             column needs to tell Paid from Un-Paid.
+  // Resulting pairs (Payment Status — Status):
+  //   ReConfirmed           → Paid            — ReConfirmed
+  //   Confirmed             → Payment Pending — Confirmed
+  //   On Request            → Payment Pending — On Request
+  //   Confirmed/Cancelled   → Un-Paid         — Cancelled
+  //   ReConfirmed/Cancelled → Paid            — Cancelled
+  const resolveStatus = (b) => {
+    const rawStatus = String(b?.confirmationStatus || "").trim();
+    // A confirm-history compound ("Confirmed / ReConfirmed") surfaces only its
+    // LATEST segment — same collapse the hotel list applies.
+    const rawSegments = rawStatus.split("/").map((seg) => seg.trim()).filter(Boolean);
+    const isConfirmHistoryCompound =
+      rawSegments.length > 1 &&
+      rawSegments.every((seg) =>
+        ["confirmed", "reconfirmed"].includes(seg.replace(/\s+/g, "").toLowerCase()),
+      );
+    const raw = isConfirmHistoryCompound ? rawSegments[rawSegments.length - 1] : rawStatus;
     const normalized = raw.replace(/\s+/g, "").toLowerCase();
     // The Status column mirrors the FINAL result shown at the top of
     // /booking-details/senior-citizen-booking/{id} — never the composite
@@ -318,39 +351,26 @@ export default function SeniorCitizenBookingList() {
     );
     const isPreConfirmOnRequest =
       isOnRequestRoom && !b?.onRequestConfirmed && normalized !== "reconfirmed";
-    if (b?.cancelled) {
-      if (isPreConfirmOnRequest) {
-        return {
-          meta: {
-            label: "On Request / Cancelled",
-            bg: "#fdecec",
-            color: "#b42318",
-            dot: "#ef4444",
-          },
-          raw: "On Request / Cancelled",
-        };
-      }
-      if (normalized === "confirmed" || normalized === "reconfirmed") {
-        return {
-          meta: {
-            label: `${raw} / Cancelled`,
-            bg: "#fdecec",
-            color: "#b42318",
-            dot: "#ef4444",
-          },
-          raw: `${raw} / Cancelled`,
-        };
-      }
-      return { meta: STATUS_META.CANCELLED, raw: "Cancelled" };
+    if (b?.cancelled || normalized === "cancelled" || normalized === "canceled") {
+      let history = "Cancelled";
+      if (isPreConfirmOnRequest) history = "On Request / Cancelled";
+      else if (normalized === "confirmed") history = "Confirmed / Cancelled";
+      else if (normalized === "reconfirmed") history = "ReConfirmed / Cancelled";
+      return { label: "Cancelled", tone: "red", history };
     }
     if (isPreConfirmOnRequest) {
-      return { meta: STATUS_META.ONREQUEST, raw: "On Request" };
+      return { label: "On Request", tone: "orange", history: "On Request" };
     }
-    if (normalized === "confirmed") return { meta: STATUS_META.CONFIRMED, raw };
-    if (normalized === "reconfirmed") return { meta: STATUS_META.RECONFIRMED, raw };
-    if (normalized === "notconfirmed") return { meta: STATUS_META.NOTCONFIRMED, raw };
-    const upper = normalized.toUpperCase();
-    return { meta: STATUS_META[upper], raw: raw || "-" };
+    if (normalized === "confirmed") {
+      return { label: "Confirmed", tone: "green", history: "Confirmed" };
+    }
+    if (normalized === "reconfirmed") {
+      return { label: "ReConfirmed", tone: "green", history: "ReConfirmed" };
+    }
+    if (normalized === "notconfirmed") {
+      return { label: "Not Confirmed", tone: "red", history: "Not Confirmed" };
+    }
+    return { label: raw || "-", tone: "grey", history: raw };
   };
 
   const filtered = useMemo(() => {
@@ -397,6 +417,16 @@ export default function SeniorCitizenBookingList() {
       });
     }
 
+    // Check-in Date picker — exact-day match on the booking's checkInDate
+    // (the picker gives YYYY-MM-DD). Mirrors HotelBookingList / DayStay:
+    // rows without a check-in date are hidden while a date is picked. Works
+    // together with the Time Period (book date) and Booking Type filters.
+    if (checkInDateFilter) {
+      list = list.filter(
+        (b) => String(b.checkInDate || "").slice(0, 10) === checkInDateFilter,
+      );
+    }
+
     if (selectedMonth || selectedYear) {
       list = list.filter((b) => {
         if (!b.bookingDate) return false;
@@ -435,19 +465,25 @@ export default function SeniorCitizenBookingList() {
     }
 
     return list;
-  }, [rows, bookingType, selectedMonth, selectedYear, search]);
+  }, [rows, bookingType, checkInDateFilter, selectedMonth, selectedYear, search]);
 
-  const clientFilterActive =
-    bookingType !== "all" || !!selectedMonth || !!selectedYear || !!search.trim();
-  const currentPage = page + 1; // 1-based for display
-  const safeTotalPages = Math.max(1, totalPages || 1);
+  // Filter on: every booking was loaded, so the page count, the rows shown and
+  // the "Showing X to Y of Z" line all come from the filtered set. Filter off:
+  // the API already returned just this page, and its totals are used.
+  const safeTotalPages = clientFilterActive
+    ? Math.max(1, Math.ceil(filtered.length / size))
+    : Math.max(1, totalPages || 1);
+  // Typing in the search box doesn't reset the page, so keep it in range.
+  const pageIndex = Math.min(page, safeTotalPages - 1);
+  const currentPage = pageIndex + 1; // 1-based for display
+  const pageRows = clientFilterActive
+    ? filtered.slice(pageIndex * size, pageIndex * size + size)
+    : filtered;
   const totalEntries = clientFilterActive
     ? filtered.length
     : backendTotal || filtered.length;
-  const displayStart = filtered.length === 0 ? 0 : page * size + 1;
-  const displayEnd = clientFilterActive
-    ? filtered.length
-    : page * size + filtered.length;
+  const displayStart = pageRows.length === 0 ? 0 : pageIndex * size + 1;
+  const displayEnd = pageIndex * size + pageRows.length;
 
   const handlePageChange = (oneBased) => setPage(Math.max(0, oneBased - 1));
   const handlePageSizeChange = (n) => {
@@ -590,14 +626,18 @@ export default function SeniorCitizenBookingList() {
               <Col xs={12}>
                 <Card className="shadow-sm border-0 w-100" style={{ borderRadius: "8px" }}>
                   <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Booking Type
-                    </h6>
-                    <Row className="g-2">
+                    {/* Each filter carries its own label inside its column
+                        and the row bottom-aligns, so the Booking Type
+                        select, the Check-in Date picker and Clear sit on
+                        one line (same layout as DayStay / HotelBookingList). */}
+                    <Row className="g-2 align-items-end">
                       <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Booking Type
+                        </h6>
                         <Form.Select
                           value={bookingType}
                           onChange={(e) => {
@@ -614,6 +654,44 @@ export default function SeniorCitizenBookingList() {
                             </option>
                           ))}
                         </Form.Select>
+                      </Col>
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Check-in Date
+                        </h6>
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={checkInDateFilter}
+                            onChange={(e) => {
+                              setCheckInDateFilter(e.target.value);
+                              setPage(0);
+                            }}
+                            size="sm"
+                            aria-label="Check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px" }}
+                          />
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => {
+                              setCheckInDateFilter("");
+                              setSearch("");
+                              setBookingType("all");
+                              setSelectedMonth("");
+                              setSelectedYear("");
+                              setPage(0);
+                            }}
+                            disabled={!checkInDateFilter && !search && bookingType === "all" && !selectedMonth && !selectedYear}
+                            aria-label="Clear check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px", whiteSpace: "nowrap" }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Card.Body>
@@ -707,7 +785,7 @@ export default function SeniorCitizenBookingList() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filtered.length === 0 ? (
+                        {pageRows.length === 0 ? (
                           <tr>
                             <td
                               colSpan={colSpan}
@@ -721,12 +799,12 @@ export default function SeniorCitizenBookingList() {
                             </td>
                           </tr>
                         ) : (
-                          filtered.map((b, i) => {
+                          pageRows.map((b, i) => {
                             const names = getGuestNames(b);
                             const first = names[0] || "-";
                             const extra = Math.max(0, names.length - 1);
                             const payLabel = getPaymentModeLabel(b);
-                            const st = statusMetaFor(b);
+                            const st = resolveStatus(b);
                             return (
                               <tr
                                 key={b.bookingId}
@@ -750,7 +828,7 @@ export default function SeniorCitizenBookingList() {
                                     width: COLUMN_WIDTHS.sn,
                                   }}
                                 >
-                                  {page * size + i + 1}
+                                  {pageIndex * size + i + 1}
                                 </td>
                                 {role === "admin" && (
                                   <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.agentName }}>
@@ -882,21 +960,24 @@ export default function SeniorCitizenBookingList() {
                                     <span style={{ color: "#000" }}>{payLabel}</span>
                                   )}
                                 </td>
-                                {/* Payment Status — derived from the same label
-                                    the Status cell renders (st.raw): Confirmed /
-                                    On Request → Payment Pending, ReConfirmed →
-                                    Paid, a cancellation → Paid or Un-Paid
-                                    depending on whether it had been reconfirmed.
-                                    See getPaymentStatusLabel. */}
+                                {/* Payment Status — derived from the status
+                                    history (st.history): Confirmed / On Request
+                                    → Payment Pending, ReConfirmed → Paid, a
+                                    cancellation → Paid or Un-Paid depending on
+                                    whether it had been reconfirmed. See
+                                    getPaymentStatusLabel. */}
                                 <td
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.paymentStatus,
+                                    // Single labels — never break mid-word
+                                    // (matches the hotel list).
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {(() => {
-                                    const payStatusLabel = getPaymentStatusLabel(st.raw);
+                                    const payStatusLabel = getPaymentStatusLabel(st.history);
                                     if (payStatusLabel === "-") {
                                       return <span className="text-muted">-</span>;
                                     }
@@ -927,19 +1008,13 @@ export default function SeniorCitizenBookingList() {
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.status,
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
-                                  <span className="d-inline-flex align-items-center gap-1">
-                                    <StatusPill meta={st.meta} raw={st.raw} />
-                                    {!b.cancelled &&
-                                      String(b.confirmationStatus || "")
-                                        .replace(/\s+/g, "")
-                                        .toLowerCase() === "notconfirmed" && (
-                                        <FaExclamationCircle
-                                          style={{ color: "#ff9800", fontSize: "15px" }}
-                                        />
-                                      )}
-                                  </span>
+                                  <StatusText
+                                    status={st}
+                                    showWarning={st.label === "Not Confirmed"}
+                                  />
                                 </td>
                                 <td
                                   style={{
@@ -978,7 +1053,7 @@ export default function SeniorCitizenBookingList() {
             </Card>
 
             {/* Pagination */}
-            {!loading && filtered.length > 0 && (
+            {!loading && pageRows.length > 0 && (
               <Card className="shadow-sm border-0 mt-3" style={{ borderRadius: "8px" }}>
                 <Card.Body className="py-3">
                   <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 hbl-pagination-bar">
@@ -1004,7 +1079,7 @@ export default function SeniorCitizenBookingList() {
                         ))}
                       </Form.Select>
                     </div>
-                    {totalPages > 1 && (
+                    {safeTotalPages > 1 && (
                       <Pagination className="mb-0">
                         <Pagination.Prev
                           disabled={currentPage === 1}
@@ -1014,16 +1089,21 @@ export default function SeniorCitizenBookingList() {
                             opacity: currentPage === 1 ? 0.5 : 1,
                           }}
                         />
-                        {Array.from({ length: safeTotalPages }, (_, i) => i + 1).map((pageNumber) => (
-                          <Pagination.Item
-                            key={pageNumber}
-                            active={currentPage === pageNumber}
-                            onClick={() => handlePageChange(pageNumber)}
-                            style={{ cursor: "pointer", minWidth: "38px", textAlign: "center" }}
-                          >
-                            {pageNumber}
-                          </Pagination.Item>
-                        ))}
+                        {/* First 3 … current ±1 … last 3 — shared helper. */}
+                        {getPaginationItems(safeTotalPages, currentPage).map((item) =>
+                          typeof item === "number" ? (
+                            <Pagination.Item
+                              key={item}
+                              active={currentPage === item}
+                              onClick={() => handlePageChange(item)}
+                              style={{ cursor: "pointer", minWidth: "38px", textAlign: "center" }}
+                            >
+                              {item}
+                            </Pagination.Item>
+                          ) : (
+                            <Pagination.Ellipsis key={item} disabled />
+                          ),
+                        )}
                         <Pagination.Next
                           disabled={currentPage === safeTotalPages}
                           onClick={() =>

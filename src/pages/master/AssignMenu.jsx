@@ -285,6 +285,11 @@ export default function AssignMenu() {
           color: #6b7280; background: #f3f4f6;
           padding: 1px 8px; border-radius: 999px;
         }
+        .am-hidden-count {
+          margin-left: 6px; font-size: 11px; font-weight: 500;
+          color: #F75E00; background: #FDECD6;
+          padding: 1px 8px; border-radius: 999px;
+        }
         .am-parent-check { margin-left: auto; }
         .am-parent .form-check { margin: 0; }
         .am-parent .form-check-input { margin-top: 0; cursor: pointer; }
@@ -504,6 +509,9 @@ export default function AssignMenu() {
                             const isOpen = expanded.has(parent.code) || !!q;
                             const parentDirty = Object.prototype.hasOwnProperty.call(dirty, parent.code);
                             const parentVisible = effectiveVisible(parent);
+                            // Sub-items switched off in this group (saved +
+                            // unsaved), same rule as the role rail's count.
+                            const hiddenLeafCount = leaves.filter((l) => !effectiveVisible(l)).length;
                             return (
                               <div key={parent.code} className={`am-group ${isOpen ? "open" : ""}`}>
                                 <div
@@ -517,6 +525,14 @@ export default function AssignMenu() {
                                   <span className="am-code">{parent.code}</span>
                                   {leaves.length > 0 && (
                                     <span className="am-leaf-count">{leaves.length}</span>
+                                  )}
+                                  {hiddenLeafCount > 0 && (
+                                    <span
+                                      className="am-hidden-count"
+                                      title={`${hiddenLeafCount} of ${leaves.length} item(s) in ${parent.label} hidden for ${roleLabel(role)}`}
+                                    >
+                                      {hiddenLeafCount} hidden
+                                    </span>
                                   )}
                                   {parent.isVisible == null && !parentDirty && (
                                     <span className="am-inherited">(inherit)</span>

@@ -753,7 +753,7 @@
 .hs-page-heading {
   margin: 0 0 16px;
   animation: hsPageHeadingSlide .26s ease;
-}
+} 
 .hs-page-heading-title {
   font-size: clamp(1.5rem, 1rem + 1.6vw, 2rem) !important;
   font-weight: 700 !important;
