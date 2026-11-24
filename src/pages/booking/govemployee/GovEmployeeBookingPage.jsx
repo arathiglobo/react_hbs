@@ -62,7 +62,7 @@ import {
   REFUND_PARTIAL,
   uaeToday,
 } from "../../../utils/refundLabel";
-import { parseSupplierDate } from "../../../utils/rateDeadline";
+import { parseSupplierDate, chargesFromLine } from "../../../utils/rateDeadline";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
 import { sanitizeRichHtml } from "../../../utils/safeHtml";
@@ -703,6 +703,12 @@ const GovEmployeeBookingPage = () => {
     if (!cancellationDeadline) return false;
     return uaeToday() > cancellationDeadline;
   })();
+  // Policy popup: "From 9th Jun 2027, cancellation charges will be applied" —
+  // the day after cancellationDeadline, shown only where the confirm modal
+  // shows that deadline (not for a non-refundable rate).
+  const policyChargesFromLine = isNonRefundableRate
+    ? null
+    : chargesFromLine(cancellationDeadline);
   // Only Available + refundable rates whose deadline is still upcoming, or
   // that only cost part of the booking after it, get the choice. Every other case skips the card and resolves to
   // ReConfirmed automatically.
@@ -1912,6 +1918,13 @@ const GovEmployeeBookingPage = () => {
                         <h6 className="policy-section-title">
                           Cancellation Policy
                         </h6>
+                        {policyChargesFromLine && (
+                          <div className="policy-item">
+                            <div className="policy-text">
+                              {policyChargesFromLine}
+                            </div>
+                          </div>
+                        )}
                         {policyData?.policies?.cancellationPolicy?.length ? (
                           policyData.policies.cancellationPolicy.map(
                             (p, idx) => (
@@ -1922,11 +1935,11 @@ const GovEmployeeBookingPage = () => {
                               </div>
                             ),
                           )
-                        ) : (
+                        ) : !policyChargesFromLine ? (
                           <div className="policy-empty">
                             No cancellation policy specified.
                           </div>
-                        )}
+                        ) : null}
                       </section>
 
                       <section className="policy-section">

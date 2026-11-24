@@ -36,6 +36,7 @@ import {
 } from "../../../utils/refundLabel";
 import { sanitizeRichHtml } from "../../../utils/safeHtml";
 import { orderIdPathSegment } from "../../../utils/urlSafety";
+import { chargesFromLine } from "../../../utils/rateDeadline";
 
 // Mirrors HotelBookingPage — the sole online-payment gateway surfaced when
 // the agent's available credit falls short of the booking amount. CCAvenue
@@ -296,6 +297,12 @@ export default function DayStayBookingPage() {
     today.setHours(0, 0, 0, 0);
     return today > cancellationDeadline;
   }, [cancellationDeadline]);
+  // Policy popup: "From 9th Jun 2027, cancellation charges will be applied" —
+  // the day after cancellationDeadline, the deadline this page shows. Null for
+  // a non-refundable rate (charged from booking) or with no deadline.
+  const policyChargesFromLine = isNonRefundableRate
+    ? null
+    : chargesFromLine(cancellationDeadline);
 
   // ── Payment-mode scenario derivation (mirrors HotelBookingPage) ────────
   // bookingSellingPrice = the AED total the agent owes for this booking
@@ -2026,6 +2033,13 @@ export default function DayStayBookingPage() {
                         <h6 className="policy-section-title">
                           Cancellation Policy
                         </h6>
+                        {policyChargesFromLine && (
+                          <div className="policy-item">
+                            <div className="policy-text">
+                              {policyChargesFromLine}
+                            </div>
+                          </div>
+                        )}
                         {isNonRefundableRate ? (
                           <div className="policy-item">
                             <div
@@ -2056,11 +2070,11 @@ export default function DayStayBookingPage() {
                               </div>
                             </div>
                           ))
-                        ) : (
+                        ) : !policyChargesFromLine ? (
                           <div className="policy-empty">
                             No cancellation policy specified.
                           </div>
-                        )}
+                        ) : null}
                       </section>
 
                       {/* Amendment Policy — hotel-level, lazily fetched. */}

@@ -47,6 +47,9 @@ import {
   isExactDeadline,
   isResolvedDeadlinePassed,
   formatResolvedDeadline,
+  chargesFromLine,
+  alignFirstChargeBand,
+  parseSupplierDate,
 } from "../../utils/rateDeadline";
 import { orderIdPathSegment } from "../../utils/urlSafety";
 import {
@@ -103,6 +106,20 @@ const stripPolicyHtml = (raw) => {
     .replace(/&#39;/gi, "'");
   s = s.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
   return s.trim();
+};
+
+// A supplier policy row that only states the free-cancellation window — one
+// line beginning "Free cancellation until …" that charges nothing. Atharva V2
+// ("… (Indian Standard Time)."), Darina, RateHawk ("… this time.") and the
+// IWTX / X3 text generator all write one. The policy popup replaces it with
+// "From <date>, cancellation charges will be applied", taken from the same
+// deadline the room header shows, because the supplier's date is its own
+// cut-off before the one-day safety buffer and so reads a day later.
+const isFreeCancellationRow = (p) => {
+  const text = stripPolicyHtml(p?.policyText);
+  if (!/^free cancellation until\b/i.test(text) || text.includes("\n")) return false;
+  const v = p?.value;
+  return v == null || v === "" || Number(v) === 0;
 };
 
 // Suppliers that support "Hold Room and Pay Later" on this page.
@@ -2705,6 +2722,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                       grnIsBundledSelection(selectedRate) ? (
                         <GrnPolicyBlock
                           rate={selectedRate[0]}
+                          chargesFrom
                           note={
                             selectedRate.length > 1
                               ? `Bundled rate — this cancellation policy applies to all ${selectedRate.length} rooms.`
@@ -2716,6 +2734,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           <GrnPolicyBlock
                             key={i}
                             rate={slot}
+                            chargesFrom
                             title={`Room ${i + 1}${slot?.roomCategory ? ` — ${slot.roomCategory}` : ""}`}
                             note="Non-bundled rate — each room has its own cancellation policy."
                           />
@@ -2748,17 +2767,41 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           </div>
                         );
                       }
-                      const allPolicies = selectedRate.flatMap(
-                        (r) => r.cancellationPolicy || [],
-                      );
-                      if (!allPolicies.length) {
+                      // When cancellation charges begin — the day after the
+                      // SAME deadline the room headers show and the booking
+                      // saves (deriveDeadlineDate: earliest across rooms);
+                      // RateHawk keeps its exact UAE time. It takes the place
+                      // of the supplier's "Free cancellation until …" row,
+                      // which is dropped from every rate that has a deadline,
+                      // and that rate's first charge band is moved to start
+                      // on the same day ("From 06 Jun 2027 to …" → "From
+                      // 05 Jun 2027 to …", "Valid 6/6/2027" → "6/5/2027").
+                      const bookingDeadline = deriveDeadlineDate(selectedRate);
+                      const chargesFrom = chargesFromLine(bookingDeadline);
+                      const allPolicies = selectedRate.flatMap((r) => {
+                        const rows = r.cancellationPolicy || [];
+                        return chargesFrom && resolveDeadlineDate(r)
+                          ? alignFirstChargeBand(
+                              rows.filter((p) => !isFreeCancellationRow(p)),
+                              bookingDeadline,
+                            )
+                          : rows;
+                      });
+                      if (!chargesFrom && !allPolicies.length) {
                         return (
                           <div className="policy-empty">
                             No cancellation policy specified.
                           </div>
                         );
                       }
-                      return allPolicies.map((p, idx) => (
+                      return (
+                        <>
+                          {chargesFrom && (
+                            <div className="policy-item">
+                              <div className="policy-text">{chargesFrom}</div>
+                            </div>
+                          )}
+                          {allPolicies.map((p, idx) => (
                         <div key={idx} className="policy-item">
                           <div
                             className="policy-text"
@@ -2766,20 +2809,25 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           >
                             {stripPolicyHtml(p?.policyText) || "—"}
                           </div>
+                          {/* Read day-first like the deadline is
+                              (parseSupplierDate), so a supplier's
+                              "05/06/2027" is 5 Jun, never 6 May. */}
                           {(p?.fromDate || p?.toDate) && (
                             <div className="policy-meta">
                               Valid{" "}
                               {p?.fromDate
-                                ? new Date(p.fromDate).toLocaleDateString()
+                                ? (parseSupplierDate(p.fromDate) || new Date(p.fromDate)).toLocaleDateString()
                                 : "—"}
                               {" – "}
                               {p?.toDate
-                                ? new Date(p.toDate).toLocaleDateString()
+                                ? (parseSupplierDate(p.toDate) || new Date(p.toDate)).toLocaleDateString()
                                 : "—"}
                             </div>
                           )}
                         </div>
-                      ));
+                          ))}
+                        </>
+                      );
                     })()}
                   </section>
 

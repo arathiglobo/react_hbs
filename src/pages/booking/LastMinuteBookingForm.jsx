@@ -34,6 +34,7 @@ import {
   uaeToday,
 } from "../../utils/refundLabel";
 import { orderIdPathSegment } from "../../utils/urlSafety";
+import { chargesFromLine } from "../../utils/rateDeadline";
 
 /**
  * LastMinuteBookingForm — booking creation page for the Last Minute flow.
@@ -420,6 +421,12 @@ export default function LastMinuteBookingForm() {
     if (!cancellationDeadline) return false;
     return uaeToday() > cancellationDeadline;
   })();
+  // Policy popup: "From 9th Jun 2027, cancellation charges will be applied" —
+  // the day after cancellationDeadline, shown only where the confirm modal
+  // shows that deadline (not for a non-refundable room).
+  const policyChargesFromLine = isNonRefundableRoom
+    ? null
+    : chargesFromLine(cancellationDeadline);
   // The voucher-choice flag sent to the backend: forced for the auto cases,
   // otherwise driven by the selected radio.
   const isBookAndVoucherNow = isNonRefundableRoom
@@ -1594,15 +1601,20 @@ export default function LastMinuteBookingForm() {
 
                 <section className="policy-section">
                   <h6 className="policy-section-title">Cancellation Policy</h6>
+                  {policyChargesFromLine && (
+                    <div className="policy-item">
+                      <div className="policy-text">{policyChargesFromLine}</div>
+                    </div>
+                  )}
                   {hotelCancellationPolicies.length > 0 ? (
                     hotelCancellationPolicies.map((item, idx) => (
                       <div key={`lm-cancel-${idx}`} className="policy-item">
                         <div className="policy-text">{item}</div>
                       </div>
                     ))
-                  ) : (
+                  ) : !policyChargesFromLine ? (
                     <div className="policy-empty">No cancellation policy configured for this Last Minute rate.</div>
-                  )}
+                  ) : null}
                 </section>
 
                 <section className="policy-section">

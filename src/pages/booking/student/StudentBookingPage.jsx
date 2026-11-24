@@ -46,7 +46,7 @@ import {
   worstLabel,
   uaeToday,
 } from "../../../utils/refundLabel";
-import { parseSupplierDate } from "../../../utils/rateDeadline";
+import { parseSupplierDate, chargesFromLine } from "../../../utils/rateDeadline";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
 import { orderIdPathSegment } from "../../../utils/urlSafety";
@@ -586,6 +586,14 @@ export default function StudentBookingPage() {
   const bookingRefundLabel = bookingData?.roomBreakdown?.length
     ? worstLabel(bookingData.roomBreakdown.map((slot) => labelOfRate(slot)))
     : labelOfRate(bookingData?.selectedRate);
+
+  // Policy popup: "From 9th Jun 2027, cancellation charges will be applied" —
+  // the day after cancellationDeadline, shown only where the confirm modal
+  // shows that deadline, and not under the popup's "Non Refundable" wording.
+  const policyChargesFromLine =
+    isNonRefundableRate || bookingRefundLabel === REFUND_NON_REFUNDABLE
+      ? null
+      : chargesFromLine(cancellationDeadline);
 
   // Show the Voucher Now / Voucher Later choice only for refundable
   // Available rates that still have free-cancellation time left, or that only
@@ -1675,6 +1683,11 @@ export default function StudentBookingPage() {
                             : " — cancellation is allowed per the hotel's refund terms."}
                       </div>
                     </div>
+                    {policyChargesFromLine && (
+                      <div className="policy-item">
+                        <div className="policy-text">{policyChargesFromLine}</div>
+                      </div>
+                    )}
                   </section>
 
                   <section className="policy-section policy-section-last">
