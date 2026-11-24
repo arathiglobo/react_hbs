@@ -4,15 +4,15 @@
  * Booking-list page for the government-employee flow. UI EXACTLY mirrors
  * StudentBookingList.jsx (which mirrors HotelBookingList.jsx):
  *   - Title + search (left) | Time Period card (right)
- *   - Booking Type card (full-width row)
+ *   - Booking Type + Check-in Date (with an all-filters Clear) card
  *   - Auto-layout, page-fitting table with columns:
  *       S.N · Agent Name · Customer Name · Booking Code · Reference Code ·
  *       Book Date · Booking Details · Deadline Date · Payment Mode ·
  *       Notification · Action
  *   - Card-style pagination footer
  *
- * Rows come from GET /api/gov-employee-booking/list. BookingType + Time-Period
- * filters are applied client-side over the fetched page.
+ * Rows come from GET /api/gov-employee-booking/list. BookingType, Check-in
+ * Date + Time-Period filters are applied client-side over the fetched page.
  */
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -244,6 +244,9 @@ export default function GovEmployeeBookingList() {
 
   // BookingType + time-period filters (client-side over the fetched page).
   const [bookingType, setBookingType] = useState("all");
+  // Check-in Date filter — exact-day match (YYYY-MM-DD from the date input),
+  // same control as the Hotel / Long Stay / Day Stay booking lists.
+  const [checkInDateFilter, setCheckInDateFilter] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
 
@@ -372,6 +375,13 @@ export default function GovEmployeeBookingList() {
       });
     }
 
+    const checkInPick = (checkInDateFilter || "").trim();
+    if (checkInPick) {
+      list = list.filter(
+        (b) => String(b.checkInDate || "").split("T")[0].trim() === checkInPick,
+      );
+    }
+
     if (selectedMonth || selectedYear) {
       list = list.filter((b) => {
         if (!b.bookingDate) return false;
@@ -411,10 +421,27 @@ export default function GovEmployeeBookingList() {
     }
 
     return list;
-  }, [rows, bookingType, selectedMonth, selectedYear, search]);
+  }, [rows, bookingType, checkInDateFilter, selectedMonth, selectedYear, search]);
 
   const clientFilterActive =
-    bookingType !== "all" || !!selectedMonth || !!selectedYear || !!search.trim();
+    bookingType !== "all" ||
+    !!checkInDateFilter ||
+    !!selectedMonth ||
+    !!selectedYear ||
+    !!search.trim();
+
+  // "Clear" next to the Check-in Date filter resets every filter on the
+  // page — search, Booking Type, Check-in Date and the Time Period month /
+  // year — and returns to the first page. Enabled as soon as any one of them
+  // is set. Same behaviour as the Hotel / Long Stay / Day Stay lists.
+  const handleClearFilters = () => {
+    setSearch("");
+    setBookingType("all");
+    setCheckInDateFilter("");
+    setSelectedMonth("");
+    setSelectedYear("");
+    setPage(0);
+  };
   const currentPage = page + 1; // 1-based for display
   const safeTotalPages = Math.max(1, totalPages || 1);
   const totalEntries = clientFilterActive
@@ -633,19 +660,20 @@ export default function GovEmployeeBookingList() {
               </Card>
             </div>
 
-            {/* Booking Type filter */}
+            {/* Booking Type + Check-in Date filters — same card as the Hotel /
+                Long Stay / Day Stay booking lists. */}
             <Row className="mb-2 g-1">
               <Col xs={12}>
                 <Card className="shadow-sm border-0 w-100" style={{ borderRadius: "8px" }}>
                   <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Booking Type
-                    </h6>
-                    <Row className="g-2">
+                    <Row className="g-2 align-items-end">
                       <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Booking Type
+                        </h6>
                         <Form.Select
                           value={bookingType}
                           onChange={(e) => {
@@ -662,6 +690,37 @@ export default function GovEmployeeBookingList() {
                             </option>
                           ))}
                         </Form.Select>
+                      </Col>
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Check-in Date
+                        </h6>
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={checkInDateFilter}
+                            onChange={(e) => {
+                              setCheckInDateFilter(e.target.value);
+                              setPage(0);
+                            }}
+                            size="sm"
+                            aria-label="Check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px" }}
+                          />
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={handleClearFilters}
+                            disabled={!clientFilterActive}
+                            aria-label="Clear all filters"
+                            style={{ fontSize: "0.85rem", height: "46px", whiteSpace: "nowrap" }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Card.Body>

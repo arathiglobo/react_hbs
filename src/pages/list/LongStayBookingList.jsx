@@ -412,6 +412,26 @@ export default function LongStayBookingList() {
     setPage(1);
   }, [search, status, checkInDateFilter, selectedMonth, selectedYear, perPage]);
 
+  // "Clear" next to the Check-in Date filter resets every filter on the
+  // page — search, Booking Type, Check-in Date and the Time Period month /
+  // year — back to their defaults (the effect above then returns to page 1).
+  // It is enabled as soon as any one of them is set (it used to clear only
+  // the date). Same behaviour as the Hotel / Last Minute booking lists.
+  const hasActiveFilters =
+    Boolean(search.trim()) ||
+    status !== "all" ||
+    Boolean(checkInDateFilter) ||
+    Boolean(selectedMonth) ||
+    Boolean(selectedYear);
+
+  const handleClearFilters = () => {
+    setSearch("");
+    setStatus("all");
+    setCheckInDateFilter("");
+    setSelectedMonth("");
+    setSelectedYear("");
+  };
+
   // Pagination derived from the filtered list (single client-side window).
   const totalEntries = filteredBookings.length;
   const safeTotalPages = Math.max(1, Math.ceil(totalEntries / perPage));
@@ -621,9 +641,9 @@ export default function LongStayBookingList() {
                           <Button
                             variant="outline-secondary"
                             size="sm"
-                            onClick={() => setCheckInDateFilter("")}
-                            disabled={!checkInDateFilter}
-                            aria-label="Clear check-in date filter"
+                            onClick={handleClearFilters}
+                            disabled={!hasActiveFilters}
+                            aria-label="Clear all filters"
                             style={{
                               fontSize: "0.85rem",
                               height: "46px",

@@ -381,6 +381,26 @@ export default function LastMinuteBookingList() {
     setCurrentPage(1);
   }, [search, bookingType, checkInDateFilter, selectedMonth, selectedYear, perPage]);
 
+  // "Clear" next to the Check-in Date filter resets every filter on the
+  // page — search, Booking Type, Check-in Date and the Time Period month /
+  // year — back to their defaults (the effect above then returns to page 1).
+  // It is enabled as soon as any one of them is set (it used to clear only
+  // the date). Same behaviour as /booking-details/hotel-booking-list.
+  const hasActiveFilters =
+    Boolean(search.trim()) ||
+    bookingType !== "all" ||
+    Boolean(checkInDateFilter) ||
+    Boolean(selectedMonth) ||
+    Boolean(selectedYear);
+
+  const handleClearFilters = () => {
+    setSearch("");
+    setBookingType("all");
+    setCheckInDateFilter("");
+    setSelectedMonth("");
+    setSelectedYear("");
+  };
+
   const goToPage = (p) => {
     if (p < 1 || p > totalPages) return;
     setCurrentPage(p);
@@ -590,9 +610,9 @@ export default function LastMinuteBookingList() {
                           <Button
                             variant="outline-secondary"
                             size="sm"
-                            onClick={() => setCheckInDateFilter("")}
-                            disabled={!checkInDateFilter}
-                            aria-label="Clear check-in date filter"
+                            onClick={handleClearFilters}
+                            disabled={!hasActiveFilters}
+                            aria-label="Clear all filters"
                             style={{
                               fontSize: "0.85rem",
                               height: "46px",
