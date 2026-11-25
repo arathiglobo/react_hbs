@@ -139,6 +139,9 @@
 
 .ahm-hotel-name { font-weight: 700; color: #2c3e50; }
 .ahm-hotel-id { font-size: .75rem; color: #868e96; }
+.ahm-hotel-phone { display: flex; align-items: baseline; gap: .35rem; font-size: .75rem; color: #495057; overflow-wrap: anywhere; }
+.ahm-hotel-phone > i { font-size: .65rem; color: #868e96; }
+.ahm-hotel-phone-note { font-size: .68rem; color: #868e96; }
 
 /* ---- manual review cards ---- */
 .ahm-review-card { background: #fff; border: 1px solid #e9ecef; border-radius: var(--mt-radius-sm, 10px); overflow: hidden; }
