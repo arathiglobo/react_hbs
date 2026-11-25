@@ -46,8 +46,8 @@ const SearchableSelect = ({ label, name, value, options, onChange, placeholder, 
   return (
     <Form.Group className="mb-3" ref={dropdownRef}>
       <Form.Label className="small fw-bold">
-        {required && <span className="text-danger">* </span>}
         {label}
+        {required && <span className="text-danger"> *</span>}
       </Form.Label>
       <div className="position-relative">
         <div
@@ -75,11 +75,8 @@ const SearchableSelect = ({ label, name, value, options, onChange, placeholder, 
               : (placeholder || "SELECT")}
           </span>
         </div>
-        {error && (
-          <div className="invalid-feedback d-block" style={{ fontSize: "0.7rem" }}>
-            {error}
-          </div>
-        )}
+        {/* Same size as the other fields' messages (Form.Control.Feedback). */}
+        {error && <div className="invalid-feedback d-block">{error}</div>}
         {isOpen && !disabled && (
           <div
             className="position-absolute w-100 bg-white shadow-lg rounded-2 border mt-1"
@@ -265,6 +262,8 @@ export default function SubUser() {
       errors.email = "Email is invalid";
     }
     if (!formData.mobileNumber.trim()) errors.mobileNumber = "Mobile Number is required";
+    if (!formData.countryId) errors.countryId = "Country is required";
+    if (!formData.provinceId) errors.provinceId = "City is required";
     if (!formData.address.trim()) errors.address = "Address is required";
     // Markup config — mirrors sub-agent validation
     // (SubAgent.jsx: markup + status required, currency optional).
@@ -435,7 +434,8 @@ export default function SubUser() {
 
     if (!loginFormData.username.trim()) { errors.username = "Username is required"; isValid = false; }
     if (!loginFormData.password) { errors.password = "Password is required"; isValid = false; }
-    if (loginFormData.password !== loginFormData.repassword) { errors.repassword = "Passwords do not match"; isValid = false; }
+    if (!loginFormData.repassword) { errors.repassword = "Confirm Password is required"; isValid = false; }
+    else if (loginFormData.password !== loginFormData.repassword) { errors.repassword = "Passwords do not match"; isValid = false; }
     if (loginFormData.userroles.length === 0) { errors.userroles = "At least one user role is required"; isValid = false; }
 
     setLoginErrors(errors);
@@ -814,7 +814,9 @@ export default function SubUser() {
                 <div className="row">
                   <div className="col-md-6 mb-3">
                     <Form.Group>
-                      <Form.Label className="small fw-bold">Agent Name</Form.Label>
+                      <Form.Label className="small fw-bold">
+                        Agent Name <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         placeholder="Enter agent name"
@@ -827,7 +829,9 @@ export default function SubUser() {
                   </div>
                   <div className="col-md-6 mb-3">
                     <Form.Group>
-                      <Form.Label className="small fw-bold">Email Address</Form.Label>
+                      <Form.Label className="small fw-bold">
+                        Email Address <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         type="email"
                         placeholder="Enter email"
@@ -840,7 +844,9 @@ export default function SubUser() {
                   </div>
                   <div className="col-md-6 mb-3">
                     <Form.Group>
-                      <Form.Label className="small fw-bold">Mobile Number</Form.Label>
+                      <Form.Label className="small fw-bold">
+                        Mobile Number <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         type="text"
                         placeholder="Enter mobile number"
@@ -860,6 +866,8 @@ export default function SubUser() {
                       placeholder="Select country"
                       onSearch={handleCountrySearch}
                       isLoading={isDataLoading.countries}
+                      required
+                      error={validationErrors.countryId}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
@@ -879,6 +887,8 @@ export default function SubUser() {
                       placeholder="Select city"
                       disabled={!formData.countryId}
                       isLoading={isDataLoading.provinces}
+                      required
+                      error={validationErrors.provinceId}
                       onChange={(e) =>
                         setFormData({ ...formData, provinceId: e.target.value })
                       }
@@ -886,7 +896,9 @@ export default function SubUser() {
                   </div>
                   <div className="col-md-12 mb-3">
                     <Form.Group>
-                      <Form.Label className="small fw-bold">Address</Form.Label>
+                      <Form.Label className="small fw-bold">
+                        Address <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Control
                         as="textarea"
                         rows={3}
@@ -905,7 +917,7 @@ export default function SubUser() {
                   <div className="col-md-4 mb-3">
                     <Form.Group>
                       <Form.Label className="small fw-bold">
-                        <span className="text-danger">* </span>Markup Type
+                        Markup Type <span className="text-danger">*</span>
                       </Form.Label>
                       <Form.Select
                         value={formData.markup}
@@ -939,7 +951,7 @@ export default function SubUser() {
                   <div className="col-md-4 mb-3">
                     <Form.Group>
                       <Form.Label className="small fw-bold">
-                        <span className="text-danger">* </span>Status
+                        Status <span className="text-danger">*</span>
                       </Form.Label>
                       <Form.Select
                         value={formData.status}
@@ -977,7 +989,9 @@ export default function SubUser() {
             <Modal.Body>
               <Form>
                 <Form.Group className="mb-3">
-                  <Form.Label>Username</Form.Label>
+                  <Form.Label>
+                    Username <span className="text-danger">*</span>
+                  </Form.Label>
                   <div className="input-group">
                     <Form.Control
                       name="login-username"
@@ -1001,7 +1015,9 @@ export default function SubUser() {
                   {loginErrors.username && <div className="text-danger small mt-1">{loginErrors.username}</div>}
                 </Form.Group>
                 <Form.Group className="mb-3">
-                  <Form.Label>Password</Form.Label>
+                  <Form.Label>
+                    Password <span className="text-danger">*</span>
+                  </Form.Label>
                   <InputGroup hasValidation>
                     <Form.Control
                       type={showPassword ? "text" : "password"}
@@ -1023,7 +1039,9 @@ export default function SubUser() {
                   </InputGroup>
                 </Form.Group>
                 <Form.Group className="mb-3">
-                  <Form.Label>Confirm Password</Form.Label>
+                  <Form.Label>
+                    Confirm Password <span className="text-danger">*</span>
+                  </Form.Label>
                   <InputGroup hasValidation>
                     <Form.Control
                       type={showRePassword ? "text" : "password"}
@@ -1045,7 +1063,9 @@ export default function SubUser() {
                   </InputGroup>
                 </Form.Group>
                 <Form.Group className="mb-3">
-                  <Form.Label>User Roles</Form.Label>
+                  <Form.Label>
+                    User Roles <span className="text-danger">*</span>
+                  </Form.Label>
                   <div className="form-control d-flex flex-wrap align-items-center" style={{ cursor: 'pointer' }} onClick={() => setShowRolesDropdown(!showRolesDropdown)}>
                     {loginFormData.userroles.length > 0 ? loginFormData.userroles.map(roleId => {
                       const role = rolesList.find(r => r.id === roleId);

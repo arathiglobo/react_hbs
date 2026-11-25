@@ -15,7 +15,7 @@ import NotMappedTab from "./NotMappedTab";
 import CitiesReviewTab from "./CitiesReviewTab";
 import MappingRulesTab from "./MappingRulesTab";
 import useAutoMappingStatus from "./useAutoMappingStatus";
-import { fmtNumber, statusMeta } from "./automapFormat";
+import { fmtNumber, fmtPercent, statusMeta } from "./automapFormat";
 
 /**
  * /masters/hotel-mapping/automated — the Automated Hotel Mapping screen.
@@ -64,6 +64,21 @@ export default function AutomatedHotelMappingPage() {
 
   const meta = statusMeta(status?.status || (error ? "ERROR" : "IDLE"));
   const isRunning = status?.status === "RUNNING";
+  // Overall live total shown above the tabs, for EVERY supplier (enabled on
+  // API Access or not): supplier hotels mapped so far, automatic (written by
+  // the engine) plus manual (operator decisions), out of every supplier hotel
+  // in the locally kept catalogs. From status.allSuppliers; refreshed with
+  // the 5 s poll (the catalog sizes are re-counted every 10 minutes). A
+  // backend without allSuppliers falls back to the enabled-supplier figures.
+  const all = status?.allSuppliers || null;
+  const automaticMapped = Math.max(0, Number(all ? all.automaticMapped : status?.automatedMappingsTotal) || 0);
+  const manualMapped = Math.max(0, Number(all ? all.manualMapped : status?.manualMappingsTotal) || 0);
+  const totalMapped = automaticMapped + manualMapped;
+  const supplierHotelsTotal = Math.max(
+    0,
+    Number(all ? all.supplierHotels : status?.supplierMatch?.indexedRows) || 0,
+  );
+  const totalMappedPct = supplierHotelsTotal > 0 ? Math.min(100, (totalMapped / supplierHotelsTotal) * 100) : null;
   const suppliers = useMemo(() => status?.suppliers || [], [status]);
   // Changes whenever the engine or an operator writes links / candidates.
   const pairCount = status?.supplierMatch?.pendingReviewPairs;
@@ -151,6 +166,27 @@ export default function AutomatedHotelMappingPage() {
                   The last status refresh failed ({error}). Showing the previous values.
                 </Alert>
               )}
+              {/* Overall live total of the mapping (automatic + manual), just above the Status tab. */}
+              <div className="small mb-2 d-flex flex-wrap align-items-baseline gap-2" role="status" aria-live="polite">
+                <span
+                  className="fw-semibold"
+                  title={
+                    all?.uncountedSuppliers?.length
+                      ? `Catalogs not counted in the total: ${all.uncountedSuppliers.join(", ")}`
+                      : "Every supplier, including suppliers switched off on API Access"
+                  }
+                >
+                  Total mapped{all ? " (all suppliers, live)" : " (live)"}:
+                </span>
+                <span className="fw-bold text-success">{totalMappedPct === null ? "—" : fmtPercent(totalMappedPct, 1)}</span>
+                <span className="text-muted">
+                  ({fmtNumber(totalMapped)} / {fmtNumber(supplierHotelsTotal)} supplier hotels)
+                </span>
+                <span className="text-muted">·</span>
+                <span>Automatic: {fmtNumber(automaticMapped)}</span>
+                <span className="text-muted">·</span>
+                <span>Manual: {fmtNumber(manualMapped)}</span>
+              </div>
               <Tabs activeKey={tab} onSelect={(k) => setTab(k || "status")} className="mb-3" mountOnEnter>
                 <Tab
                   eventKey="status"

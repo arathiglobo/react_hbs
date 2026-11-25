@@ -36,7 +36,7 @@ const SearchableSelect = ({ label, name, value, options, onChange, placeholder, 
 
   return (
     <Form.Group className="mb-3" ref={dropdownRef}>
-      <Form.Label className="small fw-bold">{required && <span className="text-danger">* </span>}{label}</Form.Label>
+      <Form.Label className="form-label-custom">{label}{required && <span className="text-danger"> *</span>}</Form.Label>
       <div className="position-relative">
         <div 
           className={`form-select ${error ? 'is-invalid' : ''}`}
@@ -1449,7 +1449,7 @@ export default function SubAgent() {
                         <Col md={12}>
                           <Form.Group>
                             <Form.Label className="form-label-custom">
-                              <span className="text-danger">* </span>Main Agent
+                              Main Agent <span className="text-danger">*</span>
                             </Form.Label>
                             <AgentSelect
                               agents={agents}
@@ -1470,7 +1470,7 @@ export default function SubAgent() {
                       )}
                       <Col md={4}>
                         <Form.Group>
-                          <Form.Label className="form-label-custom"><span className="text-danger">* </span>Company Name</Form.Label>
+                          <Form.Label className="form-label-custom">Company Name <span className="text-danger">*</span></Form.Label>
                           <Form.Control 
                             name="companyName" 
                             value={formData.companyName} 
@@ -1482,7 +1482,7 @@ export default function SubAgent() {
                       </Col>
                       <Col md={4}>
                         <Form.Group>
-                          <Form.Label className="form-label-custom"><span className="text-danger">* </span>Business Type</Form.Label>
+                          <Form.Label className="form-label-custom">Business Type <span className="text-danger">*</span></Form.Label>
                           <Form.Control 
                             name="businessType" 
                             value={formData.businessType} 
@@ -1494,7 +1494,7 @@ export default function SubAgent() {
                       </Col>
                       <Col md={4}>
                         <Form.Group>
-                          <Form.Label className="form-label-custom"><span className="text-danger">* </span>Company Type</Form.Label>
+                          <Form.Label className="form-label-custom">Company Type <span className="text-danger">*</span></Form.Label>
                           <Form.Select 
                             name="agentCategoryId" 
                             value={formData.agentCategoryId} 
@@ -1509,7 +1509,7 @@ export default function SubAgent() {
                       </Col>
                       <Col md={4}>
                         <Form.Group>
-                          <Form.Label className="form-label-custom"><span className="text-danger">* </span>Company Code</Form.Label>
+                          <Form.Label className="form-label-custom">Company Code <span className="text-danger">*</span></Form.Label>
                           <Form.Control 
                             name="companyCode" 
                             value={formData.companyCode} 
@@ -1520,7 +1520,7 @@ export default function SubAgent() {
                       </Col>
                       <Col md={4}>
                         <Form.Group>
-                          <Form.Label className="form-label-custom"><span className="text-danger">* </span>Authorized person - First Name</Form.Label>
+                          <Form.Label className="form-label-custom">Authorized person - First Name <span className="text-danger">*</span></Form.Label>
                           <Form.Control 
                             name="firstName" 
                             value={formData.firstName} 
@@ -1532,7 +1532,7 @@ export default function SubAgent() {
                       </Col>
                       <Col md={4}>
                         <Form.Group>
-                          <Form.Label className="form-label-custom"><span className="text-danger">* </span>Authorized person - Last Name</Form.Label>
+                          <Form.Label className="form-label-custom">Authorized person - Last Name <span className="text-danger">*</span></Form.Label>
                           <Form.Control 
                             name="lastName" 
                             value={formData.lastName} 
@@ -1553,7 +1553,7 @@ export default function SubAgent() {
                         <Row className="g-3">
                           <Col md={4}>
                             <Form.Group>
-                              <Form.Label className="form-label-custom"><span className="text-danger">* </span>Agent Email</Form.Label>
+                              <Form.Label className="form-label-custom">Agent Email <span className="text-danger">*</span></Form.Label>
                               <Form.Control 
                                 name="personalEmail" 
                                 type="email"
@@ -1577,7 +1577,7 @@ export default function SubAgent() {
                           </Col>
                           <Col md={4}>
                             <Form.Group>
-                              <Form.Label className="form-label-custom"><span className="text-danger">* </span>Mobile Number</Form.Label>
+                              <Form.Label className="form-label-custom">Mobile Number <span className="text-danger">*</span></Form.Label>
                               <Form.Control 
                                 name="mobileNumber" 
                                 value={formData.mobileNumber} 
@@ -1636,7 +1636,7 @@ export default function SubAgent() {
                           </Col>
                           <Col md={4}>
                              <Form.Group className="mb-3">
-                              <Form.Label className="form-label-custom"><span className="text-danger">* </span>City</Form.Label>
+                              <Form.Label className="form-label-custom">City <span className="text-danger">*</span></Form.Label>
                               <Form.Select
                                 name="provinceId"
                                 value={formData.provinceId} 
@@ -1652,7 +1652,7 @@ export default function SubAgent() {
                           </Col>
                           <Col md={4}>
                              <Form.Group className="mb-3">
-                              <Form.Label className="form-label-custom"><span className="text-danger">* </span>Location</Form.Label>
+                              <Form.Label className="form-label-custom">Location <span className="text-danger">*</span></Form.Label>
                               <Form.Select
                                 name="placeId"
                                 value={formData.placeId} 
@@ -1668,7 +1668,7 @@ export default function SubAgent() {
                           </Col>
                           <Col md={12}>
                             <Form.Group>
-                              <Form.Label className="form-label-custom"><span className="text-danger">* </span>Address</Form.Label>
+                              <Form.Label className="form-label-custom">Address <span className="text-danger">*</span></Form.Label>
                               <Form.Control 
                                 as="textarea" 
                                 rows={3} 
@@ -1689,7 +1689,7 @@ export default function SubAgent() {
                       <div className="custom-fieldset h-100">
                         <div className="custom-legend">Settings</div>
                         <Form.Group className="mb-3">
-                          <Form.Label className="form-label-custom"><span className="text-danger">* </span>Markup Type</Form.Label>
+                          <Form.Label className="form-label-custom">Markup Type <span className="text-danger">*</span></Form.Label>
                           <Form.Select 
                             name="markup" 
                             value={formData.markup} 
@@ -1738,7 +1738,7 @@ export default function SubAgent() {
                           </div>
                         </Form.Group>
                         <Form.Group className="mb-3">
-                          <Form.Label className="form-label-custom"><span className="text-danger">* </span>Status</Form.Label>
+                          <Form.Label className="form-label-custom">Status <span className="text-danger">*</span></Form.Label>
                           <Form.Select 
                             name="status" 
                             value={formData.status} 
@@ -1943,7 +1943,7 @@ export default function SubAgent() {
                     <Col md={6}>
                       <Form.Group className="mb-3">
                         <Form.Label>
-                          <span className="text-danger">*</span>Add Credit Limit
+                          Add Credit Limit <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
                           type="number"
@@ -2006,10 +2006,10 @@ export default function SubAgent() {
                       <Col md={6}>
                         <Form.Group className="mb-3">
                           <Form.Label>
-                            <span className="text-danger">*</span>
                             {creditAdjustDirection === "reduce"
                               ? "Reduce Credit Limit By"
                               : "Add-on Credit Limit"}
+                            <span className="text-danger"> *</span>
                           </Form.Label>
                           <Form.Control
                             type="number"
@@ -2033,7 +2033,7 @@ export default function SubAgent() {
                       <Col md={6}>
                         <Form.Group className="mb-3">
                           <Form.Label>
-                            <span className="text-danger">*</span>Remarks
+                            Remarks <span className="text-danger">*</span>
                           </Form.Label>
                           <Form.Control
                             as="textarea"
@@ -2130,7 +2130,7 @@ export default function SubAgent() {
                           <Col md={6}>
                             <Form.Group className="mb-3">
                               <Form.Label>
-                                <span className="text-danger">*</span>Temporary Credit Limit Amount
+                                Temporary Credit Limit Amount <span className="text-danger">*</span>
                               </Form.Label>
                               <Form.Control
                                 type="number"
@@ -2162,7 +2162,7 @@ export default function SubAgent() {
                           <Col md={6}>
                             <Form.Group className="mb-3">
                               <Form.Label>
-                                <span className="text-danger">*</span>Start Date &amp; Time
+                                Start Date &amp; Time <span className="text-danger">*</span>
                               </Form.Label>
                               <Form.Control
                                 type="datetime-local"
@@ -2179,7 +2179,7 @@ export default function SubAgent() {
                           <Col md={6}>
                             <Form.Group className="mb-3">
                               <Form.Label>
-                                <span className="text-danger">*</span>End Date &amp; Time
+                                End Date &amp; Time <span className="text-danger">*</span>
                               </Form.Label>
                               <Form.Control
                                 type="datetime-local"

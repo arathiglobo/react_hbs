@@ -17,6 +17,12 @@ export const STATUS_META = {
     icon: "fas fa-pause-circle",
     headline: "Automated mapping is paused.",
   },
+  PAUSED_SCHEDULE: {
+    label: "Paused — Scheduled",
+    tone: "warning",
+    icon: "fas fa-clock",
+    headline: "Automated mapping is paused by the daily schedule.",
+  },
   COMPLETED: {
     label: "Completed",
     tone: "success",
