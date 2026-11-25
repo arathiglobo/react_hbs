@@ -201,7 +201,7 @@ const CityMapping = () => {
 
   const platformCountryApis = {
     Iwtx: {
-      countries: "api/iwtx/countrylist",
+      countries: "/api/iwtx/countrylist",
     },
     Darina: {
       countries: "/api/darina/countrylist",
@@ -235,7 +235,7 @@ const CityMapping = () => {
 
   const platformCityApis = {
     Iwtx: {
-      cities: "api/iwtx/citylist",
+      cities: "/api/iwtx/citylist",
     },
     Darina: {
       cities: "/api/darina/citylist",
