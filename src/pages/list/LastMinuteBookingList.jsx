@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Container,
@@ -33,6 +33,10 @@ import RoomCountSummary from "../../components/RoomCountSummary";
 // /booking-details/hotel-booking-list and long-stay list use, so all three
 // pages share one uniform look. Visual only; no logic change.
 import "../../styles/HotelBookingListModern.css";
+// .pagination-modern — the orange rounded pager used on /new-booking/hotel and
+// the report pages. Every rule in this stylesheet is namespaced under its own
+// class names, so importing it here changes nothing else on this page.
+import "../../styles/HotelSearch.css";
 
 // Rows-per-page choices — same set as /booking-details/hotel-booking-list.
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -216,32 +220,39 @@ const matchesBookingType = (booking, type) => {
   return true;
 };
 
+// Plain coloured bold text — matches the Notification cell on
+// /booking-details/hotel-booking-list instead of a filled pill with a dot.
+// Same palette and sizes as that cell: Confirmed / ReConfirmed green and
+// On Request orange at 0.82rem; every other status uses the hotel list's
+// smaller 0.72rem text (Cancelled red, Requested / Rejected / Pending in
+// their STATUS_META colour, anything unknown grey). Keeps the `meta` prop
+// shape so the call site stays unchanged.
 const StatusPill = ({ meta, raw }) => {
-  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
+  const label = meta?.label || raw || "-";
+  const normalized = String(label).replace(/\s+/g, "").toLowerCase();
+  let color = meta?.color || "#6c757d";
+  if (normalized === "confirmed" || normalized === "reconfirmed") color = "#06a301";
+  else if (normalized === "onrequest") color = "#e67e22";
+  else if (normalized === "cancelled") color = "#dc3545";
+  const isMainStatus =
+    normalized === "confirmed" ||
+    normalized === "reconfirmed" ||
+    normalized === "onrequest";
   return (
     <span
-      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
       style={{
-        backgroundColor: meta.bg,
-        color: meta.color,
-        fontSize: "0.7rem",
+        color,
+        padding: "0.32rem 0.6rem",
+        fontSize: isMainStatus ? "0.82rem" : "0.72rem",
         fontWeight: 600,
-        lineHeight: 1,
+        borderRadius: "0.375rem",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.35rem",
         whiteSpace: "nowrap",
       }}
     >
-      {meta.dot && (
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            backgroundColor: meta.dot,
-            display: "inline-block",
-          }}
-        />
-      )}
-      {meta.label}
+      {label}
     </span>
   );
 };
@@ -370,10 +381,54 @@ export default function LastMinuteBookingList() {
     setCurrentPage(1);
   }, [search, bookingType, checkInDateFilter, selectedMonth, selectedYear, perPage]);
 
+  // "Clear" next to the Check-in Date filter resets every filter on the
+  // page — search, Booking Type, Check-in Date and the Time Period month /
+  // year — back to their defaults (the effect above then returns to page 1).
+  // It is enabled as soon as any one of them is set (it used to clear only
+  // the date). Same behaviour as /booking-details/hotel-booking-list.
+  const hasActiveFilters =
+    Boolean(search.trim()) ||
+    bookingType !== "all" ||
+    Boolean(checkInDateFilter) ||
+    Boolean(selectedMonth) ||
+    Boolean(selectedYear);
+
+  const handleClearFilters = () => {
+    setSearch("");
+    setBookingType("all");
+    setCheckInDateFilter("");
+    setSelectedMonth("");
+    setSelectedYear("");
+  };
+
   const goToPage = (p) => {
     if (p < 1 || p > totalPages) return;
     setCurrentPage(p);
   };
+
+  // Page buttons, as on /booking-details/hotel-booking-list and the report
+  // pages: always the first 3 and last 3 pages, plus the current page and its
+  // neighbours; "…" fills each gap. A gap of a single page shows that page
+  // instead — an ellipsis there would hide nothing. 30 pages on page 1 →
+  // 1 2 3 … 28 29 30.
+  const pageNumbers = useMemo(() => {
+    const EDGE_PAGES = 3;
+    const shown = new Set();
+    for (let i = 1; i <= Math.min(EDGE_PAGES, totalPages); i++) shown.add(i);
+    for (let i = Math.max(1, totalPages - EDGE_PAGES + 1); i <= totalPages; i++) shown.add(i);
+    for (let i = Math.max(1, safePage - 1); i <= Math.min(totalPages, safePage + 1); i++) {
+      shown.add(i);
+    }
+    const sorted = Array.from(shown).sort((a, b) => a - b);
+    const nums = [];
+    sorted.forEach((n, idx) => {
+      const prev = sorted[idx - 1];
+      if (prev !== undefined && n - prev === 2) nums.push(prev + 1);
+      else if (prev !== undefined && n - prev > 2) nums.push(`ellipsis-${prev}`);
+      nums.push(n);
+    });
+    return nums;
+  }, [totalPages, safePage]);
 
   // Shared table cell/header styling — identical to HotelBookingList /
   // LongStayBookingList so the three tables render uniformly.
@@ -555,9 +610,9 @@ export default function LastMinuteBookingList() {
                           <Button
                             variant="outline-secondary"
                             size="sm"
-                            onClick={() => setCheckInDateFilter("")}
-                            disabled={!checkInDateFilter}
-                            aria-label="Clear check-in date filter"
+                            onClick={handleClearFilters}
+                            disabled={!hasActiveFilters}
+                            aria-label="Clear all filters"
                             style={{
                               fontSize: "0.85rem",
                               height: "46px",
@@ -933,39 +988,29 @@ export default function LastMinuteBookingList() {
                           ))}
                         </Form.Select>
                       </div>
-                      <Pagination className="mb-0">
+                      {/* The /new-booking/hotel pager (pagination-modern) —
+                          same as /booking-details/hotel-booking-list. */}
+                      <Pagination className="mb-0 pagination-modern">
                         <Pagination.Prev
                           disabled={safePage === 1}
                           onClick={() => goToPage(safePage - 1)}
-                          style={{
-                            cursor: safePage === 1 ? "not-allowed" : "pointer",
-                            opacity: safePage === 1 ? 0.5 : 1,
-                          }}
                         />
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                          (pageNumber) => (
+                        {pageNumbers.map((n) =>
+                          typeof n === "number" ? (
                             <Pagination.Item
-                              key={pageNumber}
-                              active={safePage === pageNumber}
-                              onClick={() => goToPage(pageNumber)}
-                              style={{
-                                cursor: "pointer",
-                                minWidth: "38px",
-                                textAlign: "center",
-                              }}
+                              key={n}
+                              active={n === safePage}
+                              onClick={() => goToPage(n)}
                             >
-                              {pageNumber}
+                              {n}
                             </Pagination.Item>
+                          ) : (
+                            <Pagination.Ellipsis key={n} disabled />
                           ),
                         )}
                         <Pagination.Next
-                          disabled={safePage === totalPages}
+                          disabled={safePage >= totalPages}
                           onClick={() => goToPage(safePage + 1)}
-                          style={{
-                            cursor:
-                              safePage === totalPages ? "not-allowed" : "pointer",
-                            opacity: safePage === totalPages ? 0.5 : 1,
-                          }}
                         />
                       </Pagination>
                     </div>

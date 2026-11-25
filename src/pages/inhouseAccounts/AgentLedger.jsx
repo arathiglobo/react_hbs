@@ -102,6 +102,7 @@ const MODULES = [
   { value: "SENIOR_CITIZEN", label: "Senior Citizen" },
   { value: "STUDENT", label: "Student" },
   { value: "ACTIVITY", label: "Activity" },
+  { value: "OFFLINE", label: "Offline" },
   { value: "TRIP", label: "Trip" },
   { value: "ACCOUNTS", label: "Accounts" },
   { value: "OTHER", label: "Other" },
@@ -563,7 +564,12 @@ export default function AgentLedger() {
                 they had left to spend right after it. A cancelled
                 non-refundable booking shows as <b>Cancelled, not refunded</b>:
                 nothing goes back to the agent's credit, and only the Finance
-                team can refund it.
+                team can refund it. An <b>offline booking</b> is charged when
+                our team confirms it. Cancelled before its cancellation
+                deadline, the amount goes back (<b>Booking cancelled</b>);
+                cancelled after the deadline, it shows as{" "}
+                <b>Cancelled, not refunded</b>. One cancelled before it was
+                confirmed was never charged, so it has no line here.
                 {isAdmin && (
                   <>
                     {" "}

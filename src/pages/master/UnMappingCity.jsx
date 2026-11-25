@@ -24,6 +24,15 @@ import { apiErrorMessage } from "../../utils/apiErrorMessage";
 // to see the rest (bulk mapping created thousands per supplier).
 const PAGE_SIZE = 100;
 
+// ATHARVA_V2 is shown as ATHARVA_V2_API, like everywhere else in the app, but
+// api_city_mapping stores it as atharva_v2: a platform whose label is not its
+// provider key is mapped here before anything is sent to the backend.
+const PLATFORM_API_PROVIDER = { ATHARVA_V2_API: "atharva_v2" };
+const apiProviderOf = (platform) => PLATFORM_API_PROVIDER[platform] || platform;
+
+/** The stored provider as the screen shows it (atharva_v2 rows read ATHARVA_V2_API). */
+const providerText = (p) => (String(p || "").toLowerCase() === "atharva_v2" ? "ATHARVA_V2_API" : p);
+
 const UnMappingCity = () => {
   const [loading, setLoading] = useState(false);
   const [mappings, setMappings] = useState([]);
@@ -40,6 +49,7 @@ const UnMappingCity = () => {
     "Atharva",
     "Grn",
     "Goglobal",
+    "ATHARVA_V2_API",
   ]);
 
   const [filters, setFilters] = useState({
@@ -72,6 +82,7 @@ const UnMappingCity = () => {
     Atharva: { countries: "/api/atharva/countrylist" },
     Grn: { countries: "/api/grn/countrylist" },
     Goglobal: { countries: "/api/goglobal/countrylist" },
+    ATHARVA_V2_API: { countries: "/api/atharva-v2/countrylist" },
   };
 
   const platformCityApis = {
@@ -83,6 +94,7 @@ const UnMappingCity = () => {
     Atharva: { cities: "/api/atharva/citylist" },
     Grn: { cities: "/api/grn/citylist" },
     Goglobal: { cities: "/api/goglobal/citylist" },
+    ATHARVA_V2_API: { cities: "/api/atharva-v2/citylist" },
   };
 
   // 1. Load Master Countries
@@ -212,7 +224,7 @@ const UnMappingCity = () => {
     try {
       const response = await axiosInstance.get("/api/cityMapping", {
         params: {
-          apiProvider: filters.apiProvider || "",
+          apiProvider: apiProviderOf(filters.apiProvider) || "",
           countryId: filters.countryId || "",
           cityId: filters.cityId || "",
           page: pageToLoad,
@@ -412,7 +424,7 @@ const UnMappingCity = () => {
                     mappings.map((item, idx) => (
                       <tr key={idx} className="align-middle border-bottom">
                         <td className="px-4 py-3 fw-medium">
-                          {item.apiProvider}
+                          {providerText(item.apiProvider)}
                         </td>
                         <td className="py-3 text-start">
                           {item.apiCountryCode || "-"}

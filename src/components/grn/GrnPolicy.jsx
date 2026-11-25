@@ -1,6 +1,11 @@
 import React from "react";
 import { Badge, Button, Modal } from "react-bootstrap";
-import { isDeadlinePassed } from "../../utils/rateDeadline";
+import {
+  alignFirstChargeBand,
+  chargesFromLine,
+  isDeadlinePassed,
+  parseSupplierDate,
+} from "../../utils/rateDeadline";
 import { withoutSupplierName } from "../../utils/supplierDisplay";
 import {
   REFUND_FLEXIBLE,
@@ -261,14 +266,30 @@ export const GrnDeadlinePill = ({ rate, policy }) => {
  * Full policy block: category, free-cancellation deadline, penalty
  * timeline, no-show fee and the IST note. `title` (e.g. "Room 2 — Deluxe")
  * is shown when rendering one block per room for non-bundled rates.
+ *
+ * `chargesFrom` (booking-page "Hotel Policies & Terms" popup only): say when
+ * cancellation charges begin — "From 8th Nov 2026, cancellation charges will
+ * be applied", the day after the buffered deadline the room header shows —
+ * instead of "Free cancellation until …", drop GRN's own one-line
+ * "Free cancellation until …" summary, whose date is before the safety day,
+ * and start the first penalty window on that same day.
  */
-export const GrnPolicyBlock = ({ rate, policy, title, note, compact = false }) => {
+export const GrnPolicyBlock = ({ rate, policy, title, note, compact = false, chargesFrom = false }) => {
   const p = policy || grnPolicyFromRate(rate);
   if (!p) return null;
   // When the buffered deadline has already passed we paint the whole block
   // in the danger tone so the badge, the note and the container agree — a
   // red badge inside a green tile would just be confusing.
   const deadlinePassed = isGrnDeadlinePassed(p);
+  const chargesFromDeadline =
+    chargesFrom &&
+    !deadlinePassed &&
+    p.refundCategory === "FULLY_REFUNDABLE" &&
+    p.freeCancellationUntil
+      ? parseSupplierDate(p.freeCancellationUntil)
+      : null;
+  const chargesFromText = chargesFromLine(chargesFromDeadline);
+  const rows = chargesFromText ? alignFirstChargeBand(p.rows, chargesFromDeadline) : p.rows;
   const variant = deadlinePassed
     ? "danger"
     : categoryVariant(p.refundCategory, p.nonRefundable);
@@ -295,7 +316,7 @@ export const GrnPolicyBlock = ({ rate, policy, title, note, compact = false }) =
         )}
         {!deadlinePassed && p.refundCategory === "FULLY_REFUNDABLE" && p.freeCancellationUntil && (
           <span className="small fw-semibold" style={{ color: tone.ink }}>
-            Free cancellation until {p.freeCancellationUntil}
+            {chargesFromText || `Free cancellation until ${p.freeCancellationUntil}`}
           </span>
         )}
         {p.underCancellation && p.refundCategory !== "NON_REFUNDABLE" && (
@@ -305,7 +326,7 @@ export const GrnPolicyBlock = ({ rate, policy, title, note, compact = false }) =
         )}
       </div>
       {note && <div className="small text-muted mb-1">{note}</div>}
-      {p.policyText && (
+      {p.policyText && !(chargesFromText && /^free cancellation until\b/i.test(p.policyText)) && (
         <div className="small mb-2" style={{ color: tone.ink }}>
           {p.policyText}
         </div>
@@ -318,7 +339,7 @@ export const GrnPolicyBlock = ({ rate, policy, title, note, compact = false }) =
         </div>
       ) : p.rows.length > 0 ? (
         <ul className="small mb-2 ps-3">
-          {p.rows.map((row, idx) => (
+          {rows.map((row, idx) => (
             <li key={idx} className="mb-1" style={{ whiteSpace: "pre-line" }}>
               {row?.policyText || "—"}
             </li>

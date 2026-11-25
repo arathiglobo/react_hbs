@@ -43,6 +43,7 @@ import {
   resultsQueryParams,
 } from "../utils/hotelResultFilters";
 import useTwentyFourHourEligibility from "../hooks/useTwentyFourHourEligibility";
+import useHiddenMenuCodes from "../hooks/useHiddenMenuCodes";
 import { resultsCounterText } from "../utils/resultsCounter";
 import { ENABLE_MAP_PREVIEW } from "../config/featureFlags";
 import { FaSearch, FaStar, FaInfoCircle, FaMapMarkedAlt, FaList } from "react-icons/fa";
@@ -411,6 +412,45 @@ function useMediaQuery(query) {
   return matches;
 }
 
+// Deal feature label (as /api/hotel-feature-flags and the Available Deals
+// filter name it) → the New Booking sidebar code for that deal's flow in
+// Sidebar.jsx. When super_admin hides that entry for a role in Masters →
+// Assign Menu, the deal is dropped from this page too. Flash Sale and
+// Destination Sales have no menu entry, so they are never hidden.
+const DEAL_LABEL_MENU_CODE = {
+  "long stay": "nb_long_stay",
+  "24 hour check-in": "nb_24hr",
+  "last minute": "nb_last_minute",
+  "day stay": "nb_day_stay",
+  "meeting & space": "nb_meet_space",
+  "govt employee discount": "nb_gov",
+  "govt employee": "nb_gov",
+  "student discount": "nb_student",
+  "senior citizen": "nb_senior_citizen",
+  honeymoon: "nb_honeymoon",
+};
+
+const dealMenuCode = (label) =>
+  DEAL_LABEL_MENU_CODE[String(label || "").trim().toLowerCase()];
+
+// The feature-flag map with every hidden deal label removed from each
+// hotel's `features` (the same map back when nothing is hidden).
+function withoutHiddenDeals(featureFlagsMap, hiddenMenuCodes) {
+  if (!featureFlagsMap || !hiddenMenuCodes.size) return featureFlagsMap;
+  const out = {};
+  for (const [id, flags] of Object.entries(featureFlagsMap)) {
+    out[id] = Array.isArray(flags?.features)
+      ? {
+          ...flags,
+          features: flags.features.filter(
+            (f) => !hiddenMenuCodes.has(dealMenuCode(f)),
+          ),
+        }
+      : flags;
+  }
+  return out;
+}
+
 // ─────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────
@@ -494,6 +534,32 @@ export default function HotelSearch({
   // when there are no sub-users for the picked agent.
   const [agentStaffOptions, setAgentStaffOptions] = useState([]);
   const [selectedAgentStaff, setSelectedAgentStaff] = useState(null);
+
+  // react-select options for the two dropdowns above, built once per fetched
+  // list. If `options` is a new array on every render, react-select moves the
+  // hover highlight back to the first row, and the 100 ms typing placeholder
+  // re-renders this page constantly, so the highlight flickered.
+  const employeeSelectOptions = useMemo(
+    () =>
+      employees.map((e) => ({
+        value: e.employeeId,
+        label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+      })),
+    [employees],
+  );
+  const agentStaffSelectOptions = useMemo(
+    () =>
+      agentStaffOptions.map((s) => ({
+        value: s.id,
+        label: (s.agentName ||
+          [s.firstName, s.lastName]
+            .filter(Boolean)
+            .join(" ")
+            .trim() ||
+          `Sub-user #${s.id}`),
+      })),
+    [agentStaffOptions],
+  );
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -749,6 +815,12 @@ export default function HotelSearch({
   // above the search results and the per-hotel blinking "Flash Sale" pill.
   const [featureFlagsMap, setFeatureFlagsMap] = useState({});
 
+  // Menu codes super_admin hid for this role in Masters → Assign Menu.
+  // Deals tied to a hidden New Booking entry (DEAL_LABEL_MENU_CODE) are
+  // left out of the Available Deals filter, the deal pills, the Flash Sale
+  // badge and the deals banner.
+  const hiddenMenuCodes = useHiddenMenuCodes();
+
   const [allResults, setAllResults] = useState([]);
   const [finalHotelSearchTerm, setFinalHotelSearchTerm] = useState("");
 
@@ -822,13 +894,17 @@ export default function HotelSearch({
   const summaryBarRef = useRef(null);
   const [summaryBarHeight, setSummaryBarHeight] = useState(0);
 
-  const starOptions = [
-    { value: 5, label: "5 Stars" },
-    { value: 4, label: "4 Stars" },
-    { value: 3, label: "3 Stars" },
-    { value: 2, label: "2 Stars" },
-    { value: 1, label: "1 Star" },
-  ];
+  // Memoized for the same hover-flicker reason as employeeSelectOptions.
+  const starOptions = useMemo(
+    () => [
+      { value: 5, label: "5 Stars" },
+      { value: 4, label: "4 Stars" },
+      { value: 3, label: "3 Stars" },
+      { value: 2, label: "2 Stars" },
+      { value: 1, label: "1 Star" },
+    ],
+    [],
+  );
 
   const hotelTypeOptions = [
     { value: "hotel", label: "Hotel" },
@@ -847,6 +923,7 @@ export default function HotelSearch({
      { value: "darina", label: "Darina" },
      { value: "grn", label: "GRN" },
      { value: "goglobal", label: "GoGlobal" },
+     { value: "atharva_v2", label: "Atharva-V2" },
   ];
 
   // Channel sidebar filter — every supplier super_admin has registered
@@ -878,6 +955,18 @@ export default function HotelSearch({
     { value: "seniorCitizen",    label: "Senior Citizen" },
     { value: "destinationSales", label: "Destination Sales" },
   ];
+  const visibleDealsOptions = availableDealsOptions.filter(
+    (o) => !hiddenMenuCodes.has(dealMenuCode(o.label)),
+  );
+
+  // A ticked deal that gets hidden (Assign Menu saved meanwhile) would keep
+  // filtering with no checkbox left to untick it, so drop it.
+  useEffect(() => {
+    setAvailableDeals((prev) => {
+      const next = prev.filter((d) => !hiddenMenuCodes.has(dealMenuCode(d.label)));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [hiddenMenuCodes]);
 
   useEffect(() => {
     let index = 0;
@@ -1135,10 +1224,17 @@ export default function HotelSearch({
     return () => { cancelled = true; };
   }, [resultHotelIdsCsv]);
 
+  // Deal flags without the deals hidden in Assign Menu. Everything on the
+  // page (filters, pills, badges, banner) reads this, not featureFlagsMap.
+  const visibleFeatureFlagsMap = useMemo(
+    () => withoutHiddenDeals(featureFlagsMap, hiddenMenuCodes),
+    [featureFlagsMap, hiddenMenuCodes],
+  );
+
   const getHotelFeatureLabels = (hotel) => {
     const id = extractHotelNumericId(hotel);
     if (!id) return [];
-    const flags = featureFlagsMap[id];
+    const flags = visibleFeatureFlagsMap[id];
     if (!flags) return [];
     return Array.isArray(flags.features) ? flags.features : [];
   };
@@ -1188,10 +1284,10 @@ export default function HotelSearch({
         ? filterHotelResults(
             allResults,
             { ...resultFilters, twentyFourHour: false },
-            { featureFlagsMap },
+            { featureFlagsMap: visibleFeatureFlagsMap },
           )
         : [],
-    [is24HourCheckin, allResults, resultFilters, featureFlagsMap],
+    [is24HourCheckin, allResults, resultFilters, visibleFeatureFlagsMap],
   );
   const twentyFourHourMap = useTwentyFourHourEligibility({
     enabled: is24HourCheckin,
@@ -1204,10 +1300,10 @@ export default function HotelSearch({
   const filteredResults = useMemo(
     () =>
       filterHotelResults(allResults, resultFilters, {
-        featureFlagsMap,
+        featureFlagsMap: visibleFeatureFlagsMap,
         twentyFourHourMap,
       }),
-    [allResults, resultFilters, featureFlagsMap, twentyFourHourMap],
+    [allResults, resultFilters, visibleFeatureFlagsMap, twentyFourHourMap],
   );
 
   // A deal filter loads the whole result set into one page (see fetchHotels),
@@ -1268,11 +1364,14 @@ export default function HotelSearch({
   const mapHotels = useMemo(
     () =>
       filterHotelResults(mapData.hotels, resultFilters, {
-        featureFlagsMap: { ...featureFlagsMap, ...mapData.featureFlagsMap },
+        featureFlagsMap: {
+          ...visibleFeatureFlagsMap,
+          ...withoutHiddenDeals(mapData.featureFlagsMap, hiddenMenuCodes),
+        },
         twentyFourHourMap: { ...twentyFourHourMap, ...mapData.twentyFourHourMap },
       }),
     [mapData.hotels, mapData.featureFlagsMap, mapData.twentyFourHourMap,
-      resultFilters, featureFlagsMap, twentyFourHourMap],
+      resultFilters, visibleFeatureFlagsMap, hiddenMenuCodes, twentyFourHourMap],
   );
   const mapNote =
     mapData.totalResults > MAP_MAX_HOTELS
@@ -1301,7 +1400,7 @@ export default function HotelSearch({
       getHotelFeatureLabels(h).forEach((label) => set.add(label));
     });
     return canonical.filter((l) => set.has(l));
-  }, [filteredResults, featureFlagsMap]);
+  }, [filteredResults, visibleFeatureFlagsMap]);
 
   const effectiveTotalPages = useMemo(
     () => Math.max(1, totalPages),
@@ -2584,10 +2683,7 @@ export default function HotelSearch({
                           <span className="text-muted small">(optional)</span>
                         </Form.Label>
                         <Select
-                          options={employees.map((e) => ({
-                            value: e.employeeId,
-                            label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
-                          }))}
+                          options={employeeSelectOptions}
                           value={selectedEmployee}
                           onChange={(option) => setSelectedEmployee(option)}
                           placeholder="Select employee"
@@ -2625,15 +2721,7 @@ export default function HotelSearch({
                           <span className="text-muted small">(optional)</span>
                         </Form.Label>
                         <Select
-                          options={agentStaffOptions.map((s) => ({
-                            value: s.id,
-                            label: (s.agentName ||
-                              [s.firstName, s.lastName]
-                                .filter(Boolean)
-                                .join(" ")
-                                .trim() ||
-                              `Sub-user #${s.id}`),
-                          }))}
+                          options={agentStaffSelectOptions}
                           value={selectedAgentStaff}
                           onChange={(option) => setSelectedAgentStaff(option)}
                           placeholder="Select agent staff"
@@ -3318,7 +3406,7 @@ export default function HotelSearch({
                               )}
                             </Form.Label>
                             <div className="filter-checkbox-list">
-                              {availableDealsOptions.map((item) => (
+                              {visibleDealsOptions.map((item) => (
                                 <Form.Check
                                   key={item.value}
                                   type="checkbox"

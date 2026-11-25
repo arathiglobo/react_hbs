@@ -34,6 +34,11 @@ import {
   uaeToday,
 } from "../../utils/refundLabel";
 import { orderIdPathSegment } from "../../utils/urlSafety";
+import {
+  CCAVENUE_OUTCOME,
+  confirmCCAvenuePayment,
+} from "../../utils/ccavenuePayment";
+import { chargesFromLine } from "../../utils/rateDeadline";
 
 /**
  * LastMinuteBookingForm — booking creation page for the Last Minute flow.
@@ -420,6 +425,12 @@ export default function LastMinuteBookingForm() {
     if (!cancellationDeadline) return false;
     return uaeToday() > cancellationDeadline;
   })();
+  // Policy popup: "From 9th Jun 2027, cancellation charges will be applied" —
+  // the day after cancellationDeadline, shown only where the confirm modal
+  // shows that deadline (not for a non-refundable room).
+  const policyChargesFromLine = isNonRefundableRoom
+    ? null
+    : chargesFromLine(cancellationDeadline);
   // The voucher-choice flag sent to the backend: forced for the auto cases,
   // otherwise driven by the selected radio.
   const isBookAndVoucherNow = isNonRefundableRoom
@@ -558,20 +569,15 @@ export default function LastMinuteBookingForm() {
     navigate(location.pathname, { replace: true, state: {} });
 
     (async () => {
-      if (ccavenueStatus !== "success") {
-        toast.error("Payment was not completed. Please try again.");
-        return;
-      }
       try {
         setSubmitting(true);
-        const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
+        // Waits out a "verifying" return (bank said paid, CC Avenue's
+        // status API not yet) instead of showing "Payment was not completed".
+        const outcome = await confirmCCAvenuePayment(
+          ccavenueOrderId,
+          ccavenueStatus,
         );
-        if (statusResponse.data?.status !== "SUCCESS") {
-          toast.error(
-            statusResponse.data?.statusMessage ||
-              "Payment was not successful. Please try again.",
-          );
+        if (outcome !== CCAVENUE_OUTCOME.PAID) {
           return;
         }
         const res = await axiosInstance.post(
@@ -1594,15 +1600,20 @@ export default function LastMinuteBookingForm() {
 
                 <section className="policy-section">
                   <h6 className="policy-section-title">Cancellation Policy</h6>
+                  {policyChargesFromLine && (
+                    <div className="policy-item">
+                      <div className="policy-text">{policyChargesFromLine}</div>
+                    </div>
+                  )}
                   {hotelCancellationPolicies.length > 0 ? (
                     hotelCancellationPolicies.map((item, idx) => (
                       <div key={`lm-cancel-${idx}`} className="policy-item">
                         <div className="policy-text">{item}</div>
                       </div>
                     ))
-                  ) : (
+                  ) : !policyChargesFromLine ? (
                     <div className="policy-empty">No cancellation policy configured for this Last Minute rate.</div>
-                  )}
+                  ) : null}
                 </section>
 
                 <section className="policy-section">

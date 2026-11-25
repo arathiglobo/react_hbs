@@ -43,11 +43,15 @@ import {
   worstLabel,
   uaeToday,
 } from "../../../utils/refundLabel";
-import { parseSupplierDate } from "../../../utils/rateDeadline";
+import { parseSupplierDate, chargesFromLine } from "../../../utils/rateDeadline";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
 import { sanitizeRichHtml } from "../../../utils/safeHtml";
 import { orderIdPathSegment } from "../../../utils/urlSafety";
+import {
+  CCAVENUE_OUTCOME,
+  confirmCCAvenuePayment,
+} from "../../../utils/ccavenuePayment";
 
 const SPECIAL_REQUEST_OPTIONS = [
   "Early Check-In", "Non-Smoking Rooms", "Ground Floor", "Wheelchair Access",
@@ -445,26 +449,17 @@ export default function SeniorCitizenBookingPage() {
 
     // CC Avenue path — verify server-side, then let the backend finalize.
     (async () => {
-      if (ccavenueStatus !== "success") {
-        toast.error("Payment was not completed. Please try again.");
-        return;
-      }
-      try {
-        const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
-        );
-        if (statusResponse.data?.status !== "SUCCESS") {
-          toast.error(
-            statusResponse.data?.statusMessage ||
-              "Payment was not successful. Please try again.",
-          );
-          return;
-        }
-      } catch (err) {
-        console.error("Could not verify CC Avenue payment status:", err);
-        toast.error(
-          "Could not verify payment status. Please contact support if you were charged.",
-        );
+      // Confirm the payment with the backend first. A "verifying" return
+      // (bank said paid, CC Avenue's status API not yet) is waited for
+      // instead of being shown as "Payment was not completed".
+      // Buttons stay disabled while the payment is being verified.
+      setIsSubmitting(true);
+      const outcome = await confirmCCAvenuePayment(
+        ccavenueOrderId,
+        ccavenueStatus,
+      );
+      if (outcome !== CCAVENUE_OUTCOME.PAID) {
+        setIsSubmitting(false);
         return;
       }
       finalizeAfterCCAvenue();
@@ -586,6 +581,12 @@ export default function SeniorCitizenBookingPage() {
     if (!cancellationDeadline) return false;
     return uaeToday() > cancellationDeadline;
   })();
+  // Policy popup: "From 9th Jun 2027, cancellation charges will be applied" —
+  // the day after cancellationDeadline, shown only where the confirm modal
+  // shows that deadline (not for a non-refundable rate).
+  const policyChargesFromLine = isNonRefundableRate
+    ? null
+    : chargesFromLine(cancellationDeadline);
   // Offer the Voucher Now / Voucher Later choice only for refundable
   // Available rates that still have free-cancellation time left, or that only
   // cost part of the booking after their deadline — the same rule as the
@@ -1438,6 +1439,11 @@ export default function SeniorCitizenBookingPage() {
                     <>
                       <section className="policy-section">
                         <h6 className="policy-section-title">Cancellation Policy</h6>
+                        {policyChargesFromLine && (
+                          <div className="policy-item">
+                            <div className="policy-text">{policyChargesFromLine}</div>
+                          </div>
+                        )}
                         {policyData?.policies?.cancellationPolicy?.length ? (
                           policyData.policies.cancellationPolicy.map((p, idx) => (
                             <div key={idx} className="policy-item">
@@ -1452,9 +1458,9 @@ export default function SeniorCitizenBookingPage() {
                               )}
                             </div>
                           ))
-                        ) : (
+                        ) : !policyChargesFromLine ? (
                           <div className="policy-empty">No cancellation policy specified.</div>
-                        )}
+                        ) : null}
                       </section>
 
                       <section className="policy-section">

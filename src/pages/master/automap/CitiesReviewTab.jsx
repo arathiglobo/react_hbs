@@ -12,6 +12,9 @@ const PROVIDERS = ["", "grn", "goglobal", "iwtx"];
 
 const errorText = (err, fallback) => err?.response?.data?.error || fallback;
 
+// ATHARVA_V2 is shown as ATHARVA_V2_API, like everywhere else in the app.
+const supplierName = (p) => (p === "atharva_v2" ? "ATHARVA_V2_API" : p);
+
 /**
  * City mapping review: automated matching, what searches failed to find, data fixes, one
  * real city stored under two names, alternative names, and supplier cities that hold
@@ -225,12 +228,12 @@ export default function CitiesReviewTab({ active }) {
                 <td>{s.countryIso}</td>
                 <td>
                   <div className="fw-semibold">{s.nameA}</div>
-                  <div className="ahm-hotel-id">{s.suppliersA.join(", ") || "No suppliers"}</div>
+                  <div className="ahm-hotel-id">{s.suppliersA.map(supplierName).join(", ") || "No suppliers"}</div>
                 </td>
                 <td>
                   <div className="fw-semibold">{s.nameB}</div>
                   <div className="ahm-hotel-id">
-                    {s.cityIdB ? s.suppliersB.join(", ") || "No suppliers" : "Not a separate city here"}
+                    {s.cityIdB ? s.suppliersB.map(supplierName).join(", ") || "No suppliers" : "Not a separate city here"}
                   </div>
                 </td>
                 <td className="text-end">

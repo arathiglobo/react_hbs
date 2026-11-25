@@ -28,6 +28,10 @@ import Topbar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
 import RoomCountSummary, { countRoomTypes } from "../../components/RoomCountSummary";
 import "../../styles/HotelBookingListModern.css";
+// .pagination-modern — the orange rounded pager used on /new-booking/hotel and
+// the report pages. Every rule in this stylesheet is namespaced under its own
+// class names, so importing it here changes nothing else on this page.
+import "../../styles/HotelSearch.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
@@ -440,6 +444,26 @@ export default function DayStayBookingList() {
     setPage(1);
   }, [search, status, checkInDateFilter, selectedMonth, selectedYear, perPage]);
 
+  // "Clear" next to the Check-in Date filter resets every filter on the
+  // page — search, Booking Type, Check-in Date and the Time Period month /
+  // year — back to their defaults (the effect above then returns to page 1).
+  // It is enabled as soon as any one of them is set (it used to clear only
+  // the date). Same behaviour as the Hotel / Last Minute / Long Stay lists.
+  const hasActiveFilters =
+    Boolean(search.trim()) ||
+    status !== "all" ||
+    Boolean(checkInDateFilter) ||
+    Boolean(selectedMonth) ||
+    Boolean(selectedYear);
+
+  const handleClearFilters = () => {
+    setSearch("");
+    setStatus("all");
+    setCheckInDateFilter("");
+    setSelectedMonth("");
+    setSelectedYear("");
+  };
+
   // Pagination derived from the filtered list (single client-side window).
   const totalEntries = filteredBookings.length;
   const safeTotalPages = Math.max(1, Math.ceil(totalEntries / perPage));
@@ -454,6 +478,30 @@ export default function DayStayBookingList() {
   const displayEnd = hasResults
     ? Math.min(serialNumberBase + pageBookings.length, totalEntries)
     : 0;
+
+  // Page buttons, as on /booking-details/hotel-booking-list and the report
+  // pages: always the first 3 and last 3 pages, plus the current page and its
+  // neighbours; "…" fills each gap. A gap of a single page shows that page
+  // instead — an ellipsis there would hide nothing. 30 pages on page 1 →
+  // 1 2 3 … 28 29 30.
+  const pageNumbers = useMemo(() => {
+    const EDGE_PAGES = 3;
+    const shown = new Set();
+    for (let i = 1; i <= Math.min(EDGE_PAGES, safeTotalPages); i++) shown.add(i);
+    for (let i = Math.max(1, safeTotalPages - EDGE_PAGES + 1); i <= safeTotalPages; i++) shown.add(i);
+    for (let i = Math.max(1, currentPage - 1); i <= Math.min(safeTotalPages, currentPage + 1); i++) {
+      shown.add(i);
+    }
+    const sorted = Array.from(shown).sort((a, b) => a - b);
+    const nums = [];
+    sorted.forEach((n, idx) => {
+      const prev = sorted[idx - 1];
+      if (prev !== undefined && n - prev === 2) nums.push(prev + 1);
+      else if (prev !== undefined && n - prev > 2) nums.push(`ellipsis-${prev}`);
+      nums.push(n);
+    });
+    return nums;
+  }, [safeTotalPages, currentPage]);
 
   const baseCellStyle = {
     padding: "0.5rem 0.6rem",
@@ -626,9 +674,9 @@ export default function DayStayBookingList() {
                           <Button
                             variant="outline-secondary"
                             size="sm"
-                            onClick={() => setCheckInDateFilter("")}
-                            disabled={!checkInDateFilter}
-                            aria-label="Clear check-in date filter"
+                            onClick={handleClearFilters}
+                            disabled={!hasActiveFilters}
+                            aria-label="Clear all filters"
                             style={{ fontSize: "0.85rem", height: "46px", whiteSpace: "nowrap" }}
                           >
                             Clear
@@ -1306,49 +1354,34 @@ export default function DayStayBookingList() {
                         ))}
                       </Form.Select>
                     </div>
-                    <Pagination className="mb-0">
+                    {/* The /new-booking/hotel pager (pagination-modern) —
+                        same as /booking-details/hotel-booking-list. */}
+                    <Pagination className="mb-0 pagination-modern">
                       <Pagination.Prev
                         disabled={currentPage === 1}
                         onClick={() =>
                           currentPage > 1 && setPage(currentPage - 1)
                         }
-                        style={{
-                          cursor:
-                            currentPage === 1 ? "not-allowed" : "pointer",
-                          opacity: currentPage === 1 ? 0.5 : 1,
-                        }}
                       />
-                      {Array.from(
-                        { length: safeTotalPages },
-                        (_, i) => i + 1,
-                      ).map((pageNumber) => (
-                        <Pagination.Item
-                          key={pageNumber}
-                          active={currentPage === pageNumber}
-                          onClick={() => setPage(pageNumber)}
-                          style={{
-                            cursor: "pointer",
-                            minWidth: "38px",
-                            textAlign: "center",
-                          }}
-                        >
-                          {pageNumber}
-                        </Pagination.Item>
-                      ))}
+                      {pageNumbers.map((n) =>
+                        typeof n === "number" ? (
+                          <Pagination.Item
+                            key={n}
+                            active={n === currentPage}
+                            onClick={() => setPage(n)}
+                          >
+                            {n}
+                          </Pagination.Item>
+                        ) : (
+                          <Pagination.Ellipsis key={n} disabled />
+                        ),
+                      )}
                       <Pagination.Next
-                        disabled={currentPage === safeTotalPages}
+                        disabled={currentPage >= safeTotalPages}
                         onClick={() =>
                           currentPage < safeTotalPages &&
                           setPage(currentPage + 1)
                         }
-                        style={{
-                          cursor:
-                            currentPage === safeTotalPages
-                              ? "not-allowed"
-                              : "pointer",
-                          opacity:
-                            currentPage === safeTotalPages ? 0.5 : 1,
-                        }}
                       />
                     </Pagination>
                   </div>

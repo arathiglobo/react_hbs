@@ -544,6 +544,7 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
      { code: "RATEHAWK", name: "RATEHAWK" },
      { code: "ATHARVA", name: "ATHARVA" },
      { code: "JUMEIRAH", name: "JUMEIRAH" },
+     { code: "ATHARVA_V2", name: "ATHARVA_V2_API" },
   ];
 
 

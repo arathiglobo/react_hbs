@@ -18,8 +18,24 @@ import {
   FaCar,
   FaHotel,
   FaStar,
+  FaCheckCircle,
+  FaHourglassHalf,
+  FaCheckDouble,
+  FaTimesCircle,
+  FaReceipt,
 } from "react-icons/fa";
 import "../styles/Calendar.css";
+import "../styles/CalendarModern.css";
+
+// Booking chip status → label + monochrome icon (replaces the old emoji).
+// Same four states the emoji showed: confirmed 👍, awaiting ⏳, completed ✅,
+// cancelled ❌.
+const EVENT_STATUS = {
+  confirmed: { label: "Confirmed", Icon: FaCheckCircle },
+  pending: { label: "Awaiting confirmation", Icon: FaHourglassHalf },
+  completed: { label: "Completed", Icon: FaCheckDouble },
+  cancelled: { label: "Cancelled", Icon: FaTimesCircle },
+};
 
 export default function Calendar() {
   // Calendar state
@@ -155,13 +171,14 @@ export default function Calendar() {
     return colors[event.color] || "#6c757d";
   };
 
-  const getEventIcon = (event) => {
-    if (event.status === "cancelled") return "❌";
-    if (event.status === "completed") return "✅";
+  // Same decision order the emoji icon used.
+  const getEventStatus = (event) => {
+    if (event.status === "cancelled") return "cancelled";
+    if (event.status === "completed") return "completed";
     return event.status === "confirmed" ||
       event.bookingData?.confirmationStatus === "Confirmed"
-      ? "👍"
-      : "⏳";
+      ? "confirmed"
+      : "pending";
   };
 
   // Booking modal functions
@@ -204,114 +221,154 @@ export default function Calendar() {
   const days = getDaysInMonth(currentDate);
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+  // Pad the last week with blank cells so the grid always ends on a full row.
+  const gridDays = [
+    ...days,
+    ...Array((7 - (days.length % 7)) % 7).fill(null),
+  ];
+
+  // Bookings whose check-in falls in the month being viewed (toolbar pill).
+  const monthBookingCount = events.filter(
+    (event) =>
+      event.date.getMonth() === currentDate.getMonth() &&
+      event.date.getFullYear() === currentDate.getFullYear()
+  ).length;
+
+  const formatShortDate = (value) =>
+    new Date(value).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
+    <div className="min-vh-100 d-flex flex-column cal-modern">
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm rounded-xl">
-            <Card.Header>
-              <span className="fw-semibold" style={{ color: "#F75E00" }}>Calendar</span>
-            </Card.Header>
+          {/* Page heading */}
+          <div className="cal-head">
+            <h1 className="cal-title">Calendar</h1>
+            <p className="cal-sub">
+              Bookings are shown on their check-in date. Click a booking to see
+              its details.
+            </p>
+          </div>
 
-            {/* Calendar Display */}
-            <Card.Body className="p-0">
-              {/* Calendar Header */}
-              <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center p-3 border-bottom">
-                <div className="d-flex align-items-center">
-                  <Button
-                    variant="outline-secondary"
-                    size="sm"
-                    className="me-2"
+          <Card className="cal-card">
+            {/* Toolbar: month + booking count, navigation */}
+            <div className="cal-toolbar">
+              <div className="cal-toolbar-left">
+                <h2 className="cal-month">{formatDate(currentDate)}</h2>
+                {!loading && (
+                  <span className="cal-count">
+                    {monthBookingCount}{" "}
+                    {monthBookingCount === 1 ? "booking" : "bookings"}
+                  </span>
+                )}
+              </div>
+              <div className="cal-nav">
+                <div className="cal-nav-group">
+                  <button
+                    type="button"
+                    className="cal-nav-btn"
                     onClick={() => navigateMonth(-1)}
+                    aria-label="Previous month"
+                    title="Previous month"
                   >
                     <FaChevronLeft />
-                  </Button>
-                  <Button
-                    variant="outline-secondary"
-                    size="sm"
-                    className="me-2"
+                  </button>
+                  <button
+                    type="button"
+                    className="cal-nav-btn"
                     onClick={() => navigateMonth(1)}
+                    aria-label="Next month"
+                    title="Next month"
                   >
                     <FaChevronRight />
-                  </Button>
-                  <Button variant="primary" size="sm" onClick={goToToday}>
-                    Today
-                  </Button>
+                  </button>
                 </div>
-                <h5 className="text-primary mb-0 text-nowrap">{formatDate(currentDate)}</h5>
+                <Button variant="primary" size="sm" onClick={goToToday}>
+                  Today
+                </Button>
               </div>
+            </div>
 
-              {/* Calendar Grid */}
-              {loading ? (
-                <div className="text-center py-5">
-                  <Spinner animation="border" variant="primary" />
-                  <p className="mt-3 text-muted">Loading bookings...</p>
+            {/* Calendar Grid */}
+            {loading ? (
+              <div className="cal-loading">
+                <Spinner animation="border" variant="primary" />
+                <p>Loading bookings...</p>
+              </div>
+            ) : (
+              <>
+                {/* Week day headers */}
+                <div className="cal-weekdays">
+                  {weekDays.map((day) => (
+                    <div key={day} className="cal-weekday">
+                      {day}
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <div className="calendar-container">
-                  {/* Week day headers */}
-                  <div className="d-flex">
-                    {weekDays.map((day) => (
+
+                {/* Calendar days */}
+                <div className="cal-grid">
+                  {gridDays.map((day, index) => {
+                    const dayEvents = getEventsForDate(day);
+                    const isToday =
+                      day && day.toDateString() === new Date().toDateString();
+
+                    return (
                       <div
-                        key={day}
-                        className="flex-fill text-center week-day-header"
+                        key={index}
+                        className={`cal-day${day ? "" : " is-empty"}${
+                          isToday ? " is-today" : ""
+                        }`}
                       >
-                        {day}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Calendar days */}
-                  <div className="calendar-grid">
-                    {days.map((day, index) => {
-                      const dayEvents = getEventsForDate(day);
-                      const isToday =
-                        day && day.toDateString() === new Date().toDateString();
-
-                      return (
-                        <div
-                          key={index}
-                          className={`calendar-day ${
-                            day ? "bg-white" : "bg-light"
-                          } ${isToday ? "today" : ""}`}
-                        >
-                          {day && (
-                            <>
-                              <div className="day-number">{day.getDate()}</div>
-                              <div className="events-container">
-                                {dayEvents.map((event, eventIndex) => (
-                                  <div
+                        {day && (
+                          <>
+                            <span className="cal-day-num">{day.getDate()}</span>
+                            <div className="cal-day-events">
+                              {dayEvents.map((event, eventIndex) => {
+                                const statusKey = getEventStatus(event);
+                                const { label, Icon } = EVENT_STATUS[statusKey];
+                                return (
+                                  <button
                                     key={eventIndex}
-                                    className="event-item"
+                                    type="button"
+                                    className={`cal-event is-${statusKey}`}
                                     onClick={() => handleBookingClick(event.id)}
-                                    style={{ cursor: "pointer" }}
-                                    title="Click to view booking details"
+                                    title={`${event.id} · ${label} — click to view booking details`}
                                   >
-                                    <div className="d-flex align-items-center">
-                                      <span className="me-1">
-                                        {getEventIcon(event)}
-                                      </span>
-                                      <span className="text-truncate">
-                                        {event.id}
-                                      </span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                                    <span className="cal-event-ic" aria-hidden="true">
+                                      <Icon />
+                                    </span>
+                                    <span className="cal-event-code">{event.id}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-            </Card.Body>
+
+                {/* Legend for the chip icons */}
+                <div className="cal-legend">
+                  {Object.entries(EVENT_STATUS).map(([key, { label, Icon }]) => (
+                    <span key={key} className="cal-legend-item">
+                      <Icon aria-hidden="true" />
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
           </Card>
 
-          {/* Booking Details Modal */}
           {/* Booking Details Modal */}
           <Modal
             show={showBookingModal}
@@ -320,183 +377,132 @@ export default function Calendar() {
             centered
             backdrop="static"
             keyboard={false}
-            className="premium-modal"
+            className="cal-modern-modal"
           >
-            <Modal.Header closeButton className="bg-primary text-white" style={{ borderBottom: "none" }}>
-              <div className="w-100 me-3">
-                <div className="d-flex justify-content-between align-items-center mb-1">
-                  <Modal.Title className="fw-bold fs-5">
-                    Booking Details
-                  </Modal.Title>
-                  <Badge
-                    bg={
-                      bookingDetails?.bookingHeader?.confirmationStatus === "Confirmed"
-                        ? "success"
-                        : "danger"
-                    }
-                    style={{
-                      fontSize: "0.75rem",
-                      padding: "0.4rem 0.8rem",
-                    }}
-                  >
-                    {bookingDetails?.bookingHeader?.confirmationStatus
-                      ? bookingDetails.bookingHeader.confirmationStatus.toUpperCase()
-                      : "-"}
-                  </Badge>
-                </div>
-                <div className="text-white-50 small">
-                  <span className="me-3">
-                    <strong>Booking ID:</strong>{" "}
-                    {bookingDetails?.bookingHeader?.bookingId || "-"}
-                  </span>
-                  <span>
-                    <strong>Reference:</strong>{" "}
-                    {bookingDetails?.bookingHeader?.referenceNumber || "-"}
-                  </span>
-                </div>
-              </div>
+            <Modal.Header closeButton>
+              <Modal.Title>Booking Details</Modal.Title>
             </Modal.Header>
-            <Modal.Body className="px-4 py-4">
+            <Modal.Body>
               {loadingBookingDetails ? (
-                <div className="text-center py-5">
+                <div className="cal-loading">
                   <Spinner animation="border" variant="primary" />
-                  <p className="mt-2 text-muted">Loading booking details...</p>
+                  <p>Loading booking details...</p>
                 </div>
               ) : bookingDetails && bookingDetails.success ? (
                 <div className="booking-details">
-                  {/* Booking Header - Prominent */}
-                  <div className="mb-4 p-3 bg-light rounded border">
-                    <Row className="align-items-center">
-                      <Col md={8}>
-                        <div className="d-flex align-items-center gap-3 mb-2">
-                          <h5 className="mb-0 fw-bold text-dark">
-                            {bookingDetails.bookingHeader?.bookingCode || "N/A"}
-                          </h5>
-                          <Badge
-                            bg={
-                              bookingDetails.bookingHeader?.confirmationStatus === "Confirmed"
-                                ? "success"
-                                : "danger"
-                            }
-                            style={{
-                              fontSize: "0.75rem",
-                              padding: "0.4rem 0.8rem",
-                            }}
-                          >
-                            {bookingDetails.bookingHeader?.confirmationStatus
-                              ? bookingDetails.bookingHeader.confirmationStatus.toUpperCase()
-                              : "-"}
-                          </Badge>
+                  {/* Booking summary */}
+                  <div className="cal-summary">
+                    <div className="cal-summary-main">
+                      <div className="d-flex align-items-center flex-wrap gap-2">
+                        <h5 className="cal-summary-code">
+                          {bookingDetails.bookingHeader?.bookingCode || "N/A"}
+                        </h5>
+                        <Badge
+                          bg={
+                            bookingDetails.bookingHeader?.confirmationStatus === "Confirmed"
+                              ? "success"
+                              : "danger"
+                          }
+                        >
+                          {bookingDetails.bookingHeader?.confirmationStatus
+                            ? bookingDetails.bookingHeader.confirmationStatus.toUpperCase()
+                            : "-"}
+                        </Badge>
+                      </div>
+                      <div className="cal-summary-meta">
+                        <span>
+                          <strong>Booking ID:</strong>{" "}
+                          {bookingDetails.bookingHeader?.bookingId || "-"}
+                        </span>
+                        <span>
+                          <strong>Reference:</strong>{" "}
+                          {bookingDetails.bookingHeader?.referenceNumber || "-"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="cal-summary-dates">
+                      <div>
+                        <div className="cal-label">Booking Date</div>
+                        <div className="cal-value">
+                          {bookingDetails.bookingHeader?.bookingDate
+                            ? formatShortDate(bookingDetails.bookingHeader.bookingDate)
+                            : "-"}
                         </div>
-                        <div className="text-muted small">
-                          <span className="me-3">
-                            <strong>Booking ID:</strong>{" "}
-                            {bookingDetails.bookingHeader?.bookingId || "-"}
-                          </span>
-                          <span>
-                            <strong>Reference:</strong>{" "}
-                            {bookingDetails.bookingHeader?.referenceNumber || "-"}
-                          </span>
-                        </div>
-                      </Col>
-                      <Col md={4} className="text-end">
-                        <div className="text-muted small">
-                          <div>
-                            <strong>Booking Date:</strong>
+                      </div>
+                      {bookingDetails.bookingHeader?.deadlineDate && (
+                        <div>
+                          <div className="cal-label">Deadline</div>
+                          <div className="cal-value">
+                            {formatShortDate(bookingDetails.bookingHeader.deadlineDate)}
                           </div>
-                          <div>
-                            {bookingDetails.bookingHeader?.bookingDate
-                              ? new Date(bookingDetails.bookingHeader.bookingDate).toLocaleDateString("en-US", {
-                                  year: "numeric",
-                                  month: "short",
-                                  day: "numeric",
-                                })
-                              : "-"}
-                          </div>
-                          {bookingDetails.bookingHeader?.deadlineDate && (
-                            <>
-                              <div className="mt-2">
-                                <strong>Deadline:</strong>
-                              </div>
-                              <div>
-                                {new Date(bookingDetails.bookingHeader.deadlineDate).toLocaleDateString("en-US", {
-                                  year: "numeric",
-                                  month: "short",
-                                  day: "numeric",
-                                })}
-                              </div>
-                            </>
-                          )}
                         </div>
-                      </Col>
-                    </Row>
+                      )}
+                    </div>
                   </div>
 
-                  <Row>
-                    {/* Left Column */}
+                  <Row className="g-3 mb-3">
+                    {/* Guest Information */}
                     <Col md={7}>
-                      {/* Guest Information */}
-                      <Card className="mb-3 border-0 shadow-sm">
-                        <Card.Header
-                          className="bg-light border-bottom fw-semibold"
-                          style={{ fontSize: "0.9rem", padding: "0.75rem 1rem" }}
-                        >
+                      <Card className="cal-panel h-100 mb-0">
+                        <Card.Header>
+                          <FaUser aria-hidden="true" />
                           Guest Information
                         </Card.Header>
                         <Card.Body>
-                          <div className="mb-3">
-                            <div className="text-muted small mb-1">Guest Name</div>
-                            <div className="fw-semibold">
+                          <div className="cal-field">
+                            <div className="cal-label">Guest Name</div>
+                            <div className="cal-value is-strong">
                               {bookingDetails.guestInformation?.guestName || "-"}
                             </div>
                           </div>
                           <Row>
                             <Col md={6}>
-                              <div className="mb-3">
-                                <div className="text-muted small mb-1">Email</div>
-                                <div>{bookingDetails.guestInformation?.email || "-"}</div>
+                              <div className="cal-field">
+                                <div className="cal-label">Email</div>
+                                <div className="cal-value">
+                                  {bookingDetails.guestInformation?.email || "-"}
+                                </div>
                               </div>
                             </Col>
                             <Col md={6}>
-                              <div className="mb-3">
-                                <div className="text-muted small mb-1">Mobile Number</div>
-                                <div>{bookingDetails.guestInformation?.mobileNumber || "-"}</div>
+                              <div className="cal-field">
+                                <div className="cal-label">Mobile Number</div>
+                                <div className="cal-value">
+                                  {bookingDetails.guestInformation?.mobileNumber || "-"}
+                                </div>
                               </div>
                             </Col>
                           </Row>
-                          <div>
-                            <div className="text-muted small mb-1">Nationality</div>
-                            <div>{bookingDetails.guestInformation?.nativeCountry || "-"}</div>
+                          <div className="cal-field">
+                            <div className="cal-label">Nationality</div>
+                            <div className="cal-value">
+                              {bookingDetails.guestInformation?.nativeCountry || "-"}
+                            </div>
                           </div>
                         </Card.Body>
                       </Card>
                     </Col>
 
-                    {/* Right Column - Pricing Summary */}
+                    {/* Pricing Summary */}
                     <Col md={5}>
-                      <Card className="border-0 shadow-sm mb-3">
-                        <Card.Header
-                          className="bg-light border-bottom fw-semibold"
-                          style={{ fontSize: "0.9rem", padding: "0.75rem 1rem" }}
-                        >
+                      <Card className="cal-panel h-100 mb-0">
+                        <Card.Header>
+                          <FaReceipt aria-hidden="true" />
                           Pricing Summary
                         </Card.Header>
                         <Card.Body>
-                          <div className="mb-3">
-                            <div className="d-flex justify-content-between mb-2">
-                              <span className="text-muted">Room Rate</span>
-                              <span className="fw-semibold">
-                                {bookingDetails.bookingDetails?.currency || ""}{" "}
-                                {bookingDetails.bookingDetails?.total
-                                  ? bookingDetails.bookingDetails.total.toFixed(2)
-                                  : "0.00"}
-                              </span>
-                            </div>
+                          <div className="cal-price-row">
+                            <span>Room Rate</span>
+                            <span>
+                              {bookingDetails.bookingDetails?.currency || ""}{" "}
+                              {bookingDetails.bookingDetails?.total
+                                ? bookingDetails.bookingDetails.total.toFixed(2)
+                                : "0.00"}
+                            </span>
                           </div>
-                          <hr className="my-3" />
-                          <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded">
-                            <span className="fw-bold fs-5">Total Amount</span>
-                            <span className="text-success fw-bold fs-4">
+                          <div className="cal-total">
+                            <span className="cal-total-label">Total Amount</span>
+                            <span className="cal-total-value text-success">
                               {bookingDetails.bookingDetails?.currency || "AED"}{" "}
                               {bookingDetails.bookingDetails?.total?.toFixed(2) || "0.00"}
                             </span>
@@ -506,54 +512,58 @@ export default function Calendar() {
                     </Col>
                   </Row>
 
-                  {/* Reservation Details - Full Width */}
-                  <Card className="mb-3 border-0 shadow-sm">
-                    <Card.Header
-                      className="bg-light border-bottom fw-semibold"
-                      style={{ fontSize: "0.9rem", padding: "0.75rem 1rem" }}
-                    >
+                  {/* Reservation Details */}
+                  <Card className="cal-panel">
+                    <Card.Header>
+                      <FaHotel aria-hidden="true" />
                       Reservation Details
                     </Card.Header>
                     <Card.Body>
-                      <div className="mb-3">
-                        <div className="text-muted small mb-1">Hotel Name</div>
-                        <div className="fw-semibold">
+                      <div className="cal-field">
+                        <div className="cal-label">Hotel Name</div>
+                        <div className="cal-value is-strong">
                           {bookingDetails.bookingDetails?.hotelName || "-"}
                         </div>
                       </div>
                       <Row>
-                        <Col md={6}>
-                          <div className="mb-3">
-                            <div className="text-muted small mb-1">Check-In Date</div>
-                            <div>{bookingDetails.bookingDetails?.checkInDate || "-"}</div>
+                        <Col xs={6}>
+                          <div className="cal-field">
+                            <div className="cal-label">Check-In Date</div>
+                            <div className="cal-value">
+                              {bookingDetails.bookingDetails?.checkInDate || "-"}
+                            </div>
                           </div>
                         </Col>
-                        <Col md={6}>
-                          <div className="mb-3">
-                            <div className="text-muted small mb-1">Check-Out Date</div>
-                            <div>{bookingDetails.bookingDetails?.checkOutDate || "-"}</div>
+                        <Col xs={6}>
+                          <div className="cal-field">
+                            <div className="cal-label">Check-Out Date</div>
+                            <div className="cal-value">
+                              {bookingDetails.bookingDetails?.checkOutDate || "-"}
+                            </div>
                           </div>
                         </Col>
                       </Row>
                       <Row>
-                        <Col md={4}>
-                          <div className="mb-3">
-                            <div className="text-muted small mb-1">Duration</div>
-                            <div>
+                        <Col xs={6} md={4}>
+                          <div className="cal-field">
+                            <div className="cal-label">Duration</div>
+                            <div className="cal-value">
                               {bookingDetails.bookingDetails?.numberOfNights || "0"} Night(s)
                             </div>
                           </div>
                         </Col>
-                        <Col md={4}>
-                          <div className="mb-3">
-                            <div className="text-muted small mb-1">Number of Rooms</div>
-                            <div>{bookingDetails.bookingDetails?.numberOfRooms || "0"}</div>
+                        <Col xs={6} md={4}>
+                          <div className="cal-field">
+                            <div className="cal-label">Number of Rooms</div>
+                            <div className="cal-value">
+                              {bookingDetails.bookingDetails?.numberOfRooms || "0"}
+                            </div>
                           </div>
                         </Col>
-                        <Col md={4}>
-                          <div className="mb-3">
-                            <div className="text-muted small mb-1">Total Guests</div>
-                            <div>
+                        <Col xs={12} md={4}>
+                          <div className="cal-field">
+                            <div className="cal-label">Total Guests</div>
+                            <div className="cal-value">
                               {bookingDetails.bookingDetails?.numberOfAdults || "0"} Adults
                               {bookingDetails.bookingDetails?.numberOfChildren > 0 &&
                                 `, ${bookingDetails.bookingDetails.numberOfChildren} Children`}
@@ -564,58 +574,39 @@ export default function Calendar() {
                     </Card.Body>
                   </Card>
 
-                  {/* Rooms Information - Full Width */}
+                  {/* Room Details */}
                   {bookingDetails.bookingDetails?.rooms &&
                     bookingDetails.bookingDetails.rooms.length > 0 && (
-                      <div className="p-4 bg-light rounded border mt-3">
-                        <div className="mb-3">
-                          <h6 className="fw-bold text-dark mb-3">Room Details</h6>
-                        </div>
+                      <Card className="cal-panel">
+                        <Card.Header>
+                          <FaBed aria-hidden="true" />
+                          Room Details
+                        </Card.Header>
                         <div className="table-responsive">
-                          <Table bordered hover className="mb-0 bg-white">
-                            <thead className="table-light">
+                          <Table className="cal-rooms-table">
+                            <thead>
                               <tr>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>
-                                  Room No
-                                </th>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>
-                                  Room Category
-                                </th>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>
-                                  Meal Plan
-                                </th>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>
-                                  Adults
-                                </th>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600" }}>
-                                  Children
-                                </th>
-                                <th style={{ fontSize: "0.85rem", padding: "0.75rem", fontWeight: "600", textAlign: "right" }}>
-                                  Rate
-                                </th>
+                                <th>Room No</th>
+                                <th>Room Category</th>
+                                <th>Meal Plan</th>
+                                <th className="text-center">Adults</th>
+                                <th className="text-center">Children</th>
+                                <th className="text-end">Rate</th>
                               </tr>
                             </thead>
                             <tbody>
                               {bookingDetails.bookingDetails.rooms.map((room, index) => (
                                 <tr key={index}>
-                                  <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
+                                  <td>
                                     <span className="fw-bold text-primary">
                                       Room {room.roomNo || index + 1}
                                     </span>
                                   </td>
-                                  <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
-                                    {room.roomCategory || "-"}
-                                  </td>
-                                  <td style={{ padding: "0.75rem", verticalAlign: "middle" }}>
-                                    {room.mealPlan || "-"}
-                                  </td>
-                                  <td style={{ padding: "0.75rem", verticalAlign: "middle", textAlign: "center" }}>
-                                    {room.adults || "0"}
-                                  </td>
-                                  <td style={{ padding: "0.75rem", verticalAlign: "middle", textAlign: "center" }}>
-                                    {room.children || "0"}
-                                  </td>
-                                  <td style={{ padding: "0.75rem", verticalAlign: "middle", textAlign: "right" }}>
+                                  <td>{room.roomCategory || "-"}</td>
+                                  <td>{room.mealPlan || "-"}</td>
+                                  <td className="text-center">{room.adults || "0"}</td>
+                                  <td className="text-center">{room.children || "0"}</td>
+                                  <td className="text-end text-nowrap">
                                     {bookingDetails.bookingDetails?.currency || "AED"}{" "}
                                     {room.rate?.toFixed(2) || "0.00"}
                                   </td>
@@ -624,20 +615,25 @@ export default function Calendar() {
                             </tbody>
                           </Table>
                         </div>
-                      </div>
+                      </Card>
                     )}
                 </div>
               ) : (
-                <div className="text-center py-5">
-                  <p className="text-muted">Information unavailable at this time.</p>
-                  <Button variant="outline-dark" size="sm" onClick={closeBookingModal} className="mt-2 rounded-pill px-4">
+                <div className="cal-empty">
+                  <p>Information unavailable at this time.</p>
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={closeBookingModal}
+                    className="px-4"
+                  >
                     Return to Calendar
                   </Button>
                 </div>
               )}
             </Modal.Body>
-            <Modal.Footer style={{ backgroundColor: "#f8f9fa", borderTop: "1px solid #dee2e6" }}>
-              <Button variant="secondary" onClick={closeBookingModal}>
+            <Modal.Footer>
+              <Button variant="outline-secondary" onClick={closeBookingModal}>
                 Close
               </Button>
             </Modal.Footer>

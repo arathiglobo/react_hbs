@@ -44,6 +44,10 @@ import "../../../styles/RoomList.css";
 // live in this stylesheet — imported so the sidebar picks up the HBP treatment.
 import "../../../styles/HotelBookingPage.css";
 import { orderIdPathSegment } from "../../../utils/urlSafety";
+import {
+  CCAVENUE_OUTCOME,
+  confirmCCAvenuePayment,
+} from "../../../utils/ccavenuePayment";
 
 // The stash channel that survives a hard refresh on this page. PackageBooking
 // writes it just before navigating here (see setCurrentStep-turned-navigate
@@ -191,20 +195,15 @@ const PackageCheckout = () => {
     navigate(location.pathname, { replace: true, state: {} });
 
     (async () => {
-      if (ccavenueStatus !== "success") {
-        toast.error("Payment was not completed. Please try again.");
-        return;
-      }
       try {
         setIsFinalizingPayment(true);
-        const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
+        // Waits out a "verifying" return (bank said paid, CC Avenue's
+        // status API not yet) instead of showing "Payment was not completed".
+        const outcome = await confirmCCAvenuePayment(
+          ccavenueOrderId,
+          ccavenueStatus,
         );
-        if (statusResponse.data?.status !== "SUCCESS") {
-          toast.error(
-            statusResponse.data?.statusMessage ||
-              "Payment was not successful. Please try again.",
-          );
+        if (outcome !== CCAVENUE_OUTCOME.PAID) {
           return;
         }
         const res = await axiosInstance.post(

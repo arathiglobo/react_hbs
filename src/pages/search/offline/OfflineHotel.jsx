@@ -201,6 +201,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
       tax,
       sellingPrice: form.unitPrice ? selling : "",
     }));
+    if (errors.tax) setErrors((prev) => { const { tax: _, ...rest } = prev; return rest; });
   };
 
   // Min checkout = day after checkin
@@ -222,7 +223,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
     if (!form.checkIn) e.checkIn = "Check In is required";
     if (!form.checkOut) e.checkOut = "Check Out is required";
     if (!form.bookingCode.trim()) e.bookingCode = "Booking Code is required";
-    if (!form.tax.trim()) e.tax = "Tax is required";
+    if (!form.tax.trim()) e.tax = "Additional Markup is required";
     return e;
   };
 
@@ -297,7 +298,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
           {/* Supplier */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Supplier</Form.Label>
+              <Form.Label className="form-label-modern">Supplier <span className="text-danger">*</span></Form.Label>
               <Select
                 className={`react-select-premium ${errors.supplier ? "is-invalid-select" : ""}`}
                 classNamePrefix="react-select"
@@ -317,7 +318,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
           <Col lg={4} md={6}>
             <Form.Group>
               <div className="d-flex justify-content-between align-items-center mb-1">
-                <Form.Label className="form-label-modern mb-0">Hotel</Form.Label>
+                <Form.Label className="form-label-modern mb-0">Hotel <span className="text-danger">*</span></Form.Label>
                 <Button
                   variant="primary"
                   type="button"
@@ -350,22 +351,23 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
           {/* Room Type */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Room Type</Form.Label>
+              <Form.Label className="form-label-modern">Room Type <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="text"
-                className="form-control-premium"
+                className={inputCls("roomType")}
                 name="roomType"
                 value={form.roomType}
                 onChange={handleChange}
                 placeholder="Room Type"
               />
+              {errors.roomType && <div className="text-danger small mt-1">{errors.roomType}</div>}
             </Form.Group>
           </Col>
 
           {/* Meal Plan */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Meal Plan</Form.Label>
+              <Form.Label className="form-label-modern">Meal Plan <span className="text-danger">*</span></Form.Label>
               <Select
                 className={`react-select-premium ${errors.mealPlan ? "is-invalid-select" : ""}`}
                 classNamePrefix="react-select"
@@ -402,7 +404,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
           {/* Booking Code */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Booking Code</Form.Label>
+              <Form.Label className="form-label-modern">Booking Code <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="text"
                 className={inputCls("bookingCode")}
@@ -418,7 +420,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
           {/* No of Rooms */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">No Of Rooms</Form.Label>
+              <Form.Label className="form-label-modern">No Of Rooms <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="number"
                 min="1"
@@ -435,7 +437,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
           {/* Unit Price */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Unit Price (in AED)</Form.Label>
+              <Form.Label className="form-label-modern">Unit Price (in AED) <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="number"
                 min="0"
@@ -450,20 +452,21 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
             </Form.Group>
           </Col>
 
-          {/* Tax */}
+          {/* Additional Markup (%) — saved as the line's tax % */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Tax (%)</Form.Label>
+              <Form.Label className="form-label-modern">Additional Markup (%) <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="number"
                 min="0"
                 step="0.01"
-                className="form-control-premium"
+                className={inputCls("tax")}
                 name="tax"
                 value={form.tax}
                 onChange={handleTaxChange}
-                placeholder="Tax"
+                placeholder="Additional Markup"
               />
+              {errors.tax && <div className="text-danger small mt-1">{errors.tax}</div>}
             </Form.Group>
           </Col>
 
@@ -487,7 +490,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
           {/* Check In Date */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Check In Date</Form.Label>
+              <Form.Label className="form-label-modern">Check In Date <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="date"
                 className={inputCls("checkIn")}
@@ -510,7 +513,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
           {/* Check Out Date */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Check Out Date</Form.Label>
+              <Form.Label className="form-label-modern">Check Out Date <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="date"
                 className={inputCls("checkOut")}

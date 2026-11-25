@@ -20,11 +20,15 @@ import {
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
-import { resolveInhouseDeadline } from "../../utils/rateDeadline";
+import { resolveInhouseDeadline, chargesFromLine } from "../../utils/rateDeadline";
 import RefundBadge from "../../components/RefundBadge";
 import { uaeToday, labelOfRate, chargeNowText, REFUND_PARTIAL } from "../../utils/refundLabel";
 import { sanitizeRichHtml } from "../../utils/safeHtml";
 import { orderIdPathSegment } from "../../utils/urlSafety";
+import {
+  CCAVENUE_OUTCOME,
+  confirmCCAvenuePayment,
+} from "../../utils/ccavenuePayment";
 
 // Dummy online-payment gateways shown when an agent's credit is short.
 // Each routes to /payment/<id> — a placeholder card-entry page.
@@ -427,6 +431,13 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
   const isNonRefundableRate =
     bookingData?.selectedRate?.nonRefundable === true ||
     bookingData?.selectedRate?.nonRefundable === "true";
+
+  // Policy popup: "From 9th Jun 2027, cancellation charges will be applied" —
+  // the day after cancellationDeadline, the deadline this page shows. Null for
+  // a non-refundable rate (charged from booking) or with no deadline.
+  const policyChargesFromLine = isNonRefundableRate
+    ? null
+    : chargesFromLine(cancellationDeadline);
 
   // True when the booking has BOTH refundable and non-refundable rooms
   // in roomBreakdown. Drives the notice at the top of the Guest Details
@@ -856,28 +867,20 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
 
     // CC Avenue path — verify server-side, then let the backend finalize.
     (async () => {
-      if (ccavenueStatus !== "success") {
-        toast.error("Payment was not completed. Please try again.");
-        sessionStorage.removeItem("hbpPendingCreatePayload");
-        return;
-      }
-      try {
-        const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
-        );
-        if (statusResponse.data?.status !== "SUCCESS") {
-          toast.error(
-            statusResponse.data?.statusMessage ||
-              "Payment was not successful. Please try again.",
-          );
+      // Confirm the payment with the backend first. A "verifying" return
+      // (bank said paid, CC Avenue's status API not yet) is waited for
+      // instead of being shown as "Payment was not completed".
+      // Buttons stay disabled while the payment is being verified.
+      setIsSubmitting(true);
+      const outcome = await confirmCCAvenuePayment(
+        ccavenueOrderId,
+        ccavenueStatus,
+      );
+      if (outcome !== CCAVENUE_OUTCOME.PAID) {
+        setIsSubmitting(false);
+        if (outcome === CCAVENUE_OUTCOME.NOT_PAID) {
           sessionStorage.removeItem("hbpPendingCreatePayload");
-          return;
         }
-      } catch (err) {
-        console.error("Could not verify CC Avenue payment status:", err);
-        toast.error(
-          "Could not verify payment status. Please contact support if you were charged.",
-        );
         return;
       }
       // Payment is confirmed — ask the backend to create the booking from
@@ -2365,6 +2368,13 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                         <h6 className="policy-section-title">
                           Cancellation Policy
                         </h6>
+                        {policyChargesFromLine && (
+                          <div className="policy-item">
+                            <div className="policy-text">
+                              {policyChargesFromLine}
+                            </div>
+                          </div>
+                        )}
                         {isNonRefundableRate ? (
                           <div className="policy-item">
                             <div
@@ -2406,11 +2416,11 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                               </div>
                             ),
                           )
-                        ) : (
+                        ) : !policyChargesFromLine ? (
                           <div className="policy-empty">
                             No cancellation policy specified.
                           </div>
-                        )}
+                        ) : null}
                       </section>
 
                       {/* Amendment Policy */}

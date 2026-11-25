@@ -47,8 +47,15 @@ import {
   isExactDeadline,
   isResolvedDeadlinePassed,
   formatResolvedDeadline,
+  chargesFromLine,
+  alignFirstChargeBand,
+  parseSupplierDate,
 } from "../../utils/rateDeadline";
 import { orderIdPathSegment } from "../../utils/urlSafety";
+import {
+  CCAVENUE_OUTCOME,
+  confirmCCAvenuePayment,
+} from "../../utils/ccavenuePayment";
 import {
   SUPPLIER_BOOKING_TIMEOUT_MS,
   SUPPLIER_SEARCH_TIMEOUT_MS,
@@ -105,6 +112,20 @@ const stripPolicyHtml = (raw) => {
   return s.trim();
 };
 
+// A supplier policy row that only states the free-cancellation window — one
+// line beginning "Free cancellation until …" that charges nothing. Atharva V2
+// ("… (Indian Standard Time)."), Darina, RateHawk ("… this time.") and the
+// IWTX / X3 text generator all write one. The policy popup replaces it with
+// "From <date>, cancellation charges will be applied", taken from the same
+// deadline the room header shows, because the supplier's date is its own
+// cut-off before the one-day safety buffer and so reads a day later.
+const isFreeCancellationRow = (p) => {
+  const text = stripPolicyHtml(p?.policyText);
+  if (!/^free cancellation until\b/i.test(text) || text.includes("\n")) return false;
+  const v = p?.value;
+  return v == null || v === "" || Number(v) === 0;
+};
+
 // Suppliers that support "Hold Room and Pay Later" on this page.
 //
 // ATHARVA (3) is NOT listed: it has a real supplier-side hold endpoint
@@ -135,12 +156,18 @@ const GOGLOBAL_API_ID = 21;
 // auto-cancel uses their existing cancel adapters in SupplierCancellationDispatcher.
 const X3_API_ID = 15;
 const DARINA_API_ID = 16;
+// ATHARVA_V2 (22) — separate from ATHARVA (3). Holds work like GoGlobal: the
+// booking is vouchered at the supplier and the agent's credit is taken at
+// Reconfirm (AtharvaV2HotelBookingService via SupplierHoldRule); the deadline
+// job cancels an unconfirmed hold through its cancel adapter.
+const ATHARVA_V2_API_ID = 22;
 export const HOLD_CAPABLE_API_IDS = new Set([
   GRN_API_ID,
   IWTX_API_ID,
   GOGLOBAL_API_ID,
   X3_API_ID,
   DARINA_API_ID,
+  ATHARVA_V2_API_ID,
 ]);
 
 /**
@@ -695,26 +722,17 @@ const ApiBookingPageForHotels = () => {
     };
 
     (async () => {
-      if (ccavenueStatus !== "success") {
-        toast.error("Payment was not completed. Please try again.");
-        return;
-      }
-      try {
-        const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
-        );
-        if (statusResponse.data?.status !== "SUCCESS") {
-          toast.error(
-            statusResponse.data?.statusMessage ||
-              "Payment was not successful. Please try again.",
-          );
-          return;
-        }
-      } catch (err) {
-        console.error("Could not verify CC Avenue payment status:", err);
-        toast.error(
-          "Could not verify payment status. Please contact support if you were charged.",
-        );
+      // Confirm the payment with the backend first. A "verifying" return
+      // (bank said paid, CC Avenue's status API not yet) is waited for
+      // instead of being shown as "Payment was not completed".
+      // Buttons stay disabled while the payment is being verified.
+      setIsSubmitting(true);
+      const outcome = await confirmCCAvenuePayment(
+        ccavenueOrderId,
+        ccavenueStatus,
+      );
+      if (outcome !== CCAVENUE_OUTCOME.PAID) {
+        setIsSubmitting(false);
         return;
       }
       finalizeAfterCCAvenue();
@@ -1227,6 +1245,13 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         atharvaExpectedAmount: firstRate.atharvaExpectedAmount ?? null,
         atharvaWithinTimeLimit: firstRate.atharvaWithinTimeLimit ?? null,
         atharvaPackageRate: firstRate.atharvaPackageRate ?? null,
+        // ATHARVA_V2 (apiId 22): BookingKey / TokenId / agreed supplier amount
+        // from /api/hotel-booking/rate-check/22, plus the search keys for a
+        // fresh price check if the key expires. Null for every other supplier.
+        atharvaV2:
+          Number(bookingData?.payload?.apiId) === ATHARVA_V2_API_ID
+            ? firstRate.atharvaV2 || null
+            : null,
         cityId: bookingData.payload?.cityId || null,
         nationalityId: bookingData.payload?.nationalityId || null,
         hotelName: bookingData.hotelStaticData.hotelName,
@@ -2692,6 +2717,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                       grnIsBundledSelection(selectedRate) ? (
                         <GrnPolicyBlock
                           rate={selectedRate[0]}
+                          chargesFrom
                           note={
                             selectedRate.length > 1
                               ? `Bundled rate — this cancellation policy applies to all ${selectedRate.length} rooms.`
@@ -2703,6 +2729,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           <GrnPolicyBlock
                             key={i}
                             rate={slot}
+                            chargesFrom
                             title={`Room ${i + 1}${slot?.roomCategory ? ` — ${slot.roomCategory}` : ""}`}
                             note="Non-bundled rate — each room has its own cancellation policy."
                           />
@@ -2735,17 +2762,41 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           </div>
                         );
                       }
-                      const allPolicies = selectedRate.flatMap(
-                        (r) => r.cancellationPolicy || [],
-                      );
-                      if (!allPolicies.length) {
+                      // When cancellation charges begin — the day after the
+                      // SAME deadline the room headers show and the booking
+                      // saves (deriveDeadlineDate: earliest across rooms);
+                      // RateHawk keeps its exact UAE time. It takes the place
+                      // of the supplier's "Free cancellation until …" row,
+                      // which is dropped from every rate that has a deadline,
+                      // and that rate's first charge band is moved to start
+                      // on the same day ("From 06 Jun 2027 to …" → "From
+                      // 05 Jun 2027 to …", "Valid 6/6/2027" → "6/5/2027").
+                      const bookingDeadline = deriveDeadlineDate(selectedRate);
+                      const chargesFrom = chargesFromLine(bookingDeadline);
+                      const allPolicies = selectedRate.flatMap((r) => {
+                        const rows = r.cancellationPolicy || [];
+                        return chargesFrom && resolveDeadlineDate(r)
+                          ? alignFirstChargeBand(
+                              rows.filter((p) => !isFreeCancellationRow(p)),
+                              bookingDeadline,
+                            )
+                          : rows;
+                      });
+                      if (!chargesFrom && !allPolicies.length) {
                         return (
                           <div className="policy-empty">
                             No cancellation policy specified.
                           </div>
                         );
                       }
-                      return allPolicies.map((p, idx) => (
+                      return (
+                        <>
+                          {chargesFrom && (
+                            <div className="policy-item">
+                              <div className="policy-text">{chargesFrom}</div>
+                            </div>
+                          )}
+                          {allPolicies.map((p, idx) => (
                         <div key={idx} className="policy-item">
                           <div
                             className="policy-text"
@@ -2753,20 +2804,25 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           >
                             {stripPolicyHtml(p?.policyText) || "—"}
                           </div>
+                          {/* Read day-first like the deadline is
+                              (parseSupplierDate), so a supplier's
+                              "05/06/2027" is 5 Jun, never 6 May. */}
                           {(p?.fromDate || p?.toDate) && (
                             <div className="policy-meta">
                               Valid{" "}
                               {p?.fromDate
-                                ? new Date(p.fromDate).toLocaleDateString()
+                                ? (parseSupplierDate(p.fromDate) || new Date(p.fromDate)).toLocaleDateString()
                                 : "—"}
                               {" – "}
                               {p?.toDate
-                                ? new Date(p.toDate).toLocaleDateString()
+                                ? (parseSupplierDate(p.toDate) || new Date(p.toDate)).toLocaleDateString()
                                 : "—"}
                             </div>
                           )}
                         </div>
-                      ));
+                          ))}
+                        </>
+                      );
                     })()}
                   </section>
 

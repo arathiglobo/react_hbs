@@ -15,6 +15,9 @@ import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
+import { getPaginationItems } from "../../utils/paginationItems";
+import { hotelCategoryLabel } from "../../utils/hotelCategoryLabel";
+import { compactFilters, emailSentMessage, emailErrorMessage } from "../../utils/reportEmail";
 
 function MonthlyWise() {
 
@@ -29,7 +32,7 @@ const [searchApiQuery,setSearchApiQuery]=useState("");
 const [showMailModal, setShowMailModal] = useState(false);
 const [emailAddress, setEmailAddress] = useState("");
 const [isSending, setIsSending] = useState(false);
-const [reportType,setReportType] = useState(null);
+const [reportType,setReportType] = useState('inhouse');
 
  // Temporary filter states (what user sees/edits)
      const [tempmonth,setTempmonth]= useState("");
@@ -179,26 +182,30 @@ const handleSendEmail = async () => {
 
   setIsSending(true);
   try {
-    // API call to send email
+    // Applied month / hotel / booking filters and the "search here" text —
+    // the backend re-runs the report with them
     const response = await axiosInstance.post('/api/reports/send-email', {
-      email: emailAddress,
-      reportType: 'Monthlywise',
+      email: emailAddress.trim(),
+      reportType: 'monthlywise',
       subType: reportType, // 'inhouse' or 'api'
-      filters: {
-        month: selectedmonth,
-        hotelId: selectedhotelfilter,
-        hotelTypeId: hoteltype,
-        hotelCategoryId: hotelcategories,
-      }
+      filters: reportType === 'inhouse'
+        ? compactFilters(bookingFilters, {
+            month: getMonthNumber(selectedmonth),
+            hotelId: selectedhotelfilter,
+            hotelTypeId: hoteltype,
+            hotelCategoryId: hotelcategories,
+            searchQuery: searchInhouseQuery,
+          })
+        : compactFilters({ searchQuery: searchApiQuery }),
     });
 
     if (response.data) {
-      toast.success("Report sent successfully!");
+      toast.success(emailSentMessage(response.data));
       setShowMailModal(false);
       setEmailAddress("");
     }
   } catch (error) {
-    toast.error("Failed to send email");
+    toast.error(emailErrorMessage(error));
   } finally {
     setIsSending(false);
   }
@@ -241,7 +248,7 @@ const handlePrint = () => {
                     <td>${index + 1}</td>
                     <td>${escapeHtml(booking.hotelName || '')}</td>
                     <td>${escapeHtml(booking.hotelType || '')}</td>
-                    <td>${escapeHtml(booking.hotelCategory || '')}</td>
+                    <td>${escapeHtml(hotelCategoryLabel(booking))}</td>
                     <td>${escapeHtml(booking.noOfBooking || booking.noofbooking || 0)}</td>
                     <td>${escapeHtml(booking.noOfBookingCancelled || booking.noofCancelledbooking || 0)}</td>
                   </tr>
@@ -282,7 +289,7 @@ const handlePDF = () => {
         index + 1,
         booking.hotelName || '',
         booking.hotelType || '',
-        booking.hotelCategory || '',
+        hotelCategoryLabel(booking),
         booking.noOfBooking || booking.noofbooking || 0,
         booking.noOfBookingCancelled || booking.noofCancelledbooking || 0,
       ]),
@@ -324,7 +331,7 @@ const handleExcel = () => {
           index + 1,
           booking.hotelName || '',
           booking.hotelType || '',
-          booking.hotelCategory || '',
+          hotelCategoryLabel(booking),
           booking.noOfBooking || booking.noofbooking || 0,
           booking.noOfBookingCancelled || booking.noofCancelledbooking || 0,
         ].map(escapeCSV).join(',');
@@ -484,20 +491,16 @@ const filteredinhousebookings = useMemo(() => {
     if (hotelcategories) {
       let matches = false;
       
-      // First try to match by ID
-      if (a.hotelCategoryId && String(a.hotelCategoryId) === String(hotelcategories)) {
-        matches = true;
+      // Rows carry the category id (the filter's value); the name only
+      // matters for a row without one. (hotelCategory is an id too, so it is
+      // never compared with the selected category's name.)
+      if (a.hotelCategoryId !== null && a.hotelCategoryId !== undefined) {
+        matches = String(a.hotelCategoryId) === String(hotelcategories);
       } else {
-        // If ID doesn't match, try matching by category name/value
         const selectedCategory = hotelCategoriesOptions.find(opt => String(opt.id) === String(hotelcategories));
-        if (selectedCategory) {
-          const categoryValue = selectedCategory.name?.hotelCategory || selectedCategory.name;
-          const bookingCategoryStr = String(a.hotelCategory || '').trim();
-          const selectedCategoryStr = String(categoryValue || '').trim();
-          matches = bookingCategoryStr === selectedCategoryStr || 
-                   bookingCategoryStr.includes(selectedCategoryStr) ||
-                   selectedCategoryStr.includes(bookingCategoryStr);
-        }
+        const selectedName = selectedCategory?.name?.hotelCategory || selectedCategory?.name;
+        matches = !!selectedName && !!a.hotelCategoryName &&
+          String(a.hotelCategoryName).trim().toLowerCase() === String(selectedName).trim().toLowerCase();
       }
       
       if (!matches) return false;
@@ -509,7 +512,7 @@ const filteredinhousebookings = useMemo(() => {
       const matchesSearch =
         (a.hotelName && String(a.hotelName).toLowerCase().includes(search)) ||
         (a.hotelType && String(a.hotelType).toLowerCase().includes(search)) ||
-        (a.hotelCategory && String(a.hotelCategory).toLowerCase().includes(search)) ||
+        hotelCategoryLabel(a).toLowerCase().includes(search) ||
         (a.noOfBooking && String(a.noOfBooking).toLowerCase().includes(search)) ||
         (a.noOfBookingCancelled && String(a.noOfBookingCancelled).toLowerCase().includes(search));
       
@@ -555,6 +558,7 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                       type="radio"
                       label="Inhouse"
                       name="reportType"
+                      checked= {reportType === 'inhouse'}
                       onChange={() => setReportType('inhouse')}
                     />
                     <Form.Check
@@ -595,7 +599,7 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                         </div>
                       </Form.Group>
                     </Col>
-                    <Col md={4}>
+                    {/* <Col md={4}>
                       <Form.Group className="mb-0">
                         <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
                         <div className="d-flex gap-2">
@@ -607,7 +611,7 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                             onChange={(e) => updateBookingFilter("deadlineDateTo", e.target.value)} />
                         </div>
                       </Form.Group>
-                    </Col>
+                    </Col> */}
                     <Col md={4}>
                       <Form.Group className="mb-0">
                         <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
@@ -636,15 +640,15 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                         </div>
                       </Form.Group>
                     </Col>
-                    <Col md={8} />
+                    {/* <Col md={8} /> */}
 
                     {/* Row 3 — reference / guest text filters */}
-                    <Col md={4}>
+                    {/* <Col md={4}>
                       <Form.Control size="sm" placeholder="Booking Reference"
                         value={tempBookingFilters.bookingReference}
                         onChange={(e) => updateBookingFilter("bookingReference", e.target.value)} />
-                    </Col>
-                    <Col md={4}>
+                    </Col> */}
+                    {/* <Col md={4}>
                       <Form.Control size="sm" placeholder="Supplier Reference No."
                         value={tempBookingFilters.supplierReference}
                         onChange={(e) => updateBookingFilter("supplierReference", e.target.value)} />
@@ -653,16 +657,16 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                       <Form.Control size="sm" placeholder="Guest Name"
                         value={tempBookingFilters.guestName}
                         onChange={(e) => updateBookingFilter("guestName", e.target.value)} />
-                    </Col>
+                    </Col> */}
 
                     {/* Row 4 — city / branch / status */}
-                    <Col md={4}>
+                    {/* <Col md={4}>
                       <DestinationCity
                         value={tempBookingFilters.city}
                         onChange={(cityName) => updateBookingFilter("city", cityName)}
                       />
-                    </Col>
-                    <Col md={4}>
+                    </Col> */}
+                    {/* <Col md={4}>
                       <Form.Select size="sm"
                         value={tempBookingFilters.branch}
                         onChange={(e) => updateBookingFilter("branch", e.target.value)}>
@@ -683,7 +687,7 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                         <option value="SOLD_OUT">Sold Out</option>
                         <option value="CANCELLED">Cancelled</option>
                       </Form.Select>
-                    </Col>
+                    </Col> */}
 
                     {/* Row 5 — supplier / service type */}
                     <Col md={4}>
@@ -707,7 +711,7 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                   <h6 className="fw-bold text-primary mb-0 mt-2">Stay Details</h6>
                   <Row className="align-items-end g-4 mt-0">
                     {/* Month */}
-                    <Col md={2}>
+                    <Col md={3}>
                       <MonthFilter
                         value={tempmonth}
                         onChange={setTempmonth}
@@ -715,7 +719,7 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                     </Col>
 
                   {/* Hotel */}
-<Col md={2}>
+<Col md={3}>
   <HotelFilter
     value={tempSelectedhotelfilter}
     onChange={setTempSelectedHotelfilter}
@@ -723,7 +727,7 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
 </Col>
 
 {/* Hotel Type */}
-<Col md={2}>
+<Col md={3}>
   <HotelTypefilters
     value={temphoteltype}
     onChange={setTemphoteltype}
@@ -731,28 +735,33 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
 </Col>
 
 {/* Hotel Category */}
-<Col md={2}>
+<Col md={3}>
   <HotelCategory
     value={temphotelCategories}
     onChange={settempHotelCategories}
   />
 </Col>
-                    {/* Search / Reset Buttons */}
-                    <Col md={3}>
-                      <div className="d-flex gap-2">
-                        <Button variant="success" className="w-50" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
-                          <i className="fas fa-search me-1"></i>Search
-                        </Button>
-                        <Button variant="outline-secondary" className="w-50" size="sm" onClick={handleReset}>
-                          <i className="fas fa-undo me-1"></i>Reset
-                        </Button>
-                      </div>
-                    </Col>
+                    
                   </Row>
 
-                  {/* Action Buttons */}
-                  <Row className="mt-4">
-                    <Col md={12} className="d-flex gap-2 justify-content-end">
+                  {/* Table search on the left; Search / Reset next to the export buttons */}
+                  <Row className="mt-4 align-items-center g-2">
+                    <Col md={2}>
+                      <input
+                        type="text"
+                        value={searchInhouseQuery}
+                        onChange={(e)=>setSearchInhouseQuery(e.target.value)}
+                        placeholder="search here"
+                        className="form-control form-control-sm"
+                      />
+                    </Col>
+                    <Col md={10} className="d-flex flex-wrap gap-2 justify-content-end">
+                      <Button variant="success" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767", minWidth: 120 }} onClick={handleSearch}>
+                        <i className="fas fa-search me-1"></i>Search
+                      </Button>
+                      <Button variant="outline-secondary" size="sm" style={{ minWidth: 120 }} onClick={handleReset}>
+                        <i className="fas fa-undo me-1"></i>Reset
+                      </Button>
                       <Button variant="outline-primary" size="sm" onClick={() => setShowMailModal(true)}>
                         <i className="fas fa-envelope me-1"></i>Mail
                       </Button>
@@ -769,7 +778,7 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                   </Row>
 
                   {/* Search Input */}
-                  <Row className="mt-3">
+                  {/* <Row className="mt-3">
                     <Col className="d-flex justify-content-end">
                       <input
                         type="text"
@@ -779,7 +788,7 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                         className="form-control form-control-sm w-auto"
                       />
                     </Col>
-                  </Row>
+                  </Row> */}
                 </>
               )}
 
@@ -903,7 +912,7 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                           <td>{inhouseStartIndex + index + 1}</td>
                           <td>{booking.hotelName}</td>
                           <td>{booking.hotelType}</td>
-                          <td>{booking.hotelCategory} Star</td>
+                          <td>{hotelCategoryLabel(booking)}</td>
                           <td>{booking.noOfBooking}</td>
                           <td>{booking.noOfBookingCancelled}</td>
                         </tr>
@@ -923,28 +932,19 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                         <Pagination.Prev onClick={()=> setInhouseCurrentPage(prev=> Math.max(1,prev-1))}
                           disabled={inhousecurrentPage === 1}/>
 
-                        {Array.from({length:Inhousetotalpages},(_,i)=>i+1).map((pageNum)=>{
-                          if(
-                            pageNum === 1||
-                            pageNum === Inhousetotalpages ||
-                            (pageNum >= inhousecurrentPage -1 && pageNum <=inhousecurrentPage+1)
-                          ){
-                            return(
-                              <Pagination.Item
-                              key={pageNum}
-                              active={pageNum === inhousecurrentPage}
-                              onClick={()=>setInhouseCurrentPage(pageNum)}>
-                                {pageNum}
-                              </Pagination.Item>
-                            )
-                          }else if(
-                            pageNum === inhousecurrentPage -2||
-                            pageNum === inhousecurrentPage +2
-                          ){
-                            return <Pagination.Ellipsis key={pageNum}/>
-                          }
-                          return null;
-                        })}
+                        {getPaginationItems(Inhousetotalpages, inhousecurrentPage).map((item) =>
+                          typeof item === "string" ? (
+                            <Pagination.Ellipsis key={item} disabled />
+                          ) : (
+                            <Pagination.Item
+                              key={item}
+                              active={item === inhousecurrentPage}
+                              onClick={() => setInhouseCurrentPage(item)}
+                            >
+                              {item}
+                            </Pagination.Item>
+                          )
+                        )}
 
                         <Pagination.Next onClick={()=> setInhouseCurrentPage(prev=>Math.min(Inhousetotalpages,prev+1))}
                           disabled={inhousecurrentPage === Inhousetotalpages || Inhousetotalpages === 0}/>
@@ -993,28 +993,19 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                         <Pagination.Prev onClick={()=>setApiCurrentPage(prev =>Math.max(1,prev-1))}
                           disabled={apicurrentPage === 1}/>
 
-                        {Array.from({length:Apitotalpages},(_,i)=>i+1).map((pageNum)=>{
-                          if(
-                            pageNum === 1||
-                            pageNum === Apitotalpages||
-                            (pageNum >= apicurrentPage -1 && pageNum <=apicurrentPage+1)
-                          ){
-                            return(
-                              <Pagination.Item
-                              key={pageNum}
-                              active={pageNum===apicurrentPage}
-                              onClick={()=>setApiCurrentPage(pageNum)}>
-                                {pageNum}
-                              </Pagination.Item>
-                            )
-                          }else if(
-                            pageNum === apicurrentPage -2||
-                            pageNum === apicurrentPage +2
-                          ){
-                            return <Pagination.Ellipsis key={pageNum}/>
-                          }
-                          return null;
-                        })}
+                        {getPaginationItems(Apitotalpages, apicurrentPage).map((item) =>
+                          typeof item === "string" ? (
+                            <Pagination.Ellipsis key={item} disabled />
+                          ) : (
+                            <Pagination.Item
+                              key={item}
+                              active={item === apicurrentPage}
+                              onClick={() => setApiCurrentPage(item)}
+                            >
+                              {item}
+                            </Pagination.Item>
+                          )
+                        )}
 
                         <Pagination.Next onClick={()=>setApiCurrentPage(prev =>Math.min(Apitotalpages,prev+1))}
                           disabled={apicurrentPage === Apitotalpages || Apitotalpages === 0}/>

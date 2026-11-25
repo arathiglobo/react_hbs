@@ -4,15 +4,15 @@
  * Booking-list page for the government-employee flow. UI EXACTLY mirrors
  * StudentBookingList.jsx (which mirrors HotelBookingList.jsx):
  *   - Title + search (left) | Time Period card (right)
- *   - Booking Type card (full-width row)
+ *   - Booking Type + Check-in Date (with an all-filters Clear) card
  *   - Auto-layout, page-fitting table with columns:
  *       S.N · Agent Name · Customer Name · Booking Code · Reference Code ·
  *       Book Date · Booking Details · Deadline Date · Payment Mode ·
  *       Notification · Action
  *   - Card-style pagination footer
  *
- * Rows come from GET /api/gov-employee-booking/list. BookingType + Time-Period
- * filters are applied client-side over the fetched page.
+ * Rows come from GET /api/gov-employee-booking/list. BookingType, Check-in
+ * Date + Time-Period filters are applied client-side over the fetched page.
  */
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -46,50 +46,47 @@ import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import RoomCountSummary from "../../components/RoomCountSummary";
 import "../../styles/HotelBookingListModern.css";
+// .pagination-modern — the orange rounded pager used on /new-booking/hotel and
+// the report pages. Every rule in this stylesheet is namespaced under its own
+// class names, so importing it here changes nothing else on this page.
+import "../../styles/HotelSearch.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
-// Shared status badge palette (same as LongStayBookingList). Extra entries
-// cover the gov-employee Notification statuses that don't appear there.
-const STATUS_META = {
-  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  RECONFIRMED: { label: "ReConfirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  PENDING: { label: "Pending", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  NOTCONFIRMED: { label: "Not Confirmed", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  ONREQUEST: { label: "On Request", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+// Notification cell skin — same as /booking-details/hotel-booking-list:
+// plain coloured bold text, no filled pill or dot. Confirmed / ReConfirmed
+// (green) and On Request (orange) use the larger 0.82rem text; every other
+// status uses the hotel list's smaller 0.72rem text.
+const NOTIFICATION_TEXT_STYLE = {
+  padding: "0.32rem 0.6rem",
+  fontWeight: "600",
+  borderRadius: "0.375rem",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.35rem",
 };
 
-const StatusPill = ({ meta, raw }) => {
-  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
-  return (
-    <span
-      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
-      style={{
-        backgroundColor: meta.bg,
-        color: meta.color,
-        fontSize: "0.7rem",
-        fontWeight: 600,
-        lineHeight: 1,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {meta.dot && (
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            backgroundColor: meta.dot,
-            display: "inline-block",
-          }}
-        />
-      )}
-      {meta.label}
-    </span>
-  );
+// Colour each "/"-separated segment of a status on its own, exactly like the
+// hotel list's renderColoredStatus: Confirmed / ReConfirmed green, Cancelled
+// red, On Request orange, anything else grey. So "ReConfirmed / Cancelled"
+// shows the reconfirmed part green and only the cancelled part red.
+const statusSegColor = (part) => {
+  const p = (part || "").trim().replace(/\s+/g, "").toLowerCase();
+  if (p.startsWith("reconfirmed")) return "#06a301";
+  if (p.startsWith("confirmed")) return "#06a301";
+  if (p.startsWith("cancelled")) return "#dc3545";
+  if (p === "onrequest") return "#ff9800";
+  return "#6c757d";
 };
+const renderColoredStatus = (text) =>
+  String(text ?? "-")
+    .split("/")
+    .map((part, i) => (
+      <React.Fragment key={i}>
+        {i > 0 && <span style={{ color: "#6c757d" }}>/</span>}
+        <span style={{ color: statusSegColor(part) }}>{part}</span>
+      </React.Fragment>
+    ));
 
 // Column widths — soft hints for the auto-layout table (same as HotelBookingList).
 const COLUMN_WIDTHS = {
@@ -247,6 +244,9 @@ export default function GovEmployeeBookingList() {
 
   // BookingType + time-period filters (client-side over the fetched page).
   const [bookingType, setBookingType] = useState("all");
+  // Check-in Date filter — exact-day match (YYYY-MM-DD from the date input),
+  // same control as the Hotel / Long Stay / Day Stay booking lists.
+  const [checkInDateFilter, setCheckInDateFilter] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
 
@@ -375,6 +375,13 @@ export default function GovEmployeeBookingList() {
       });
     }
 
+    const checkInPick = (checkInDateFilter || "").trim();
+    if (checkInPick) {
+      list = list.filter(
+        (b) => String(b.checkInDate || "").split("T")[0].trim() === checkInPick,
+      );
+    }
+
     if (selectedMonth || selectedYear) {
       list = list.filter((b) => {
         if (!b.bookingDate) return false;
@@ -414,10 +421,27 @@ export default function GovEmployeeBookingList() {
     }
 
     return list;
-  }, [rows, bookingType, selectedMonth, selectedYear, search]);
+  }, [rows, bookingType, checkInDateFilter, selectedMonth, selectedYear, search]);
 
   const clientFilterActive =
-    bookingType !== "all" || !!selectedMonth || !!selectedYear || !!search.trim();
+    bookingType !== "all" ||
+    !!checkInDateFilter ||
+    !!selectedMonth ||
+    !!selectedYear ||
+    !!search.trim();
+
+  // "Clear" next to the Check-in Date filter resets every filter on the
+  // page — search, Booking Type, Check-in Date and the Time Period month /
+  // year — and returns to the first page. Enabled as soon as any one of them
+  // is set. Same behaviour as the Hotel / Long Stay / Day Stay lists.
+  const handleClearFilters = () => {
+    setSearch("");
+    setBookingType("all");
+    setCheckInDateFilter("");
+    setSelectedMonth("");
+    setSelectedYear("");
+    setPage(0);
+  };
   const currentPage = page + 1; // 1-based for display
   const safeTotalPages = Math.max(1, totalPages || 1);
   const totalEntries = clientFilterActive
@@ -434,42 +458,76 @@ export default function GovEmployeeBookingList() {
     setPage(0);
   };
 
+  // Page buttons, as on /booking-details/hotel-booking-list and the report
+  // pages: always the first 3 and last 3 pages, plus the current page and its
+  // neighbours; "…" fills each gap. A gap of a single page shows that page
+  // instead — an ellipsis there would hide nothing. 30 pages on page 1 →
+  // 1 2 3 … 28 29 30.
+  const pageNumbers = useMemo(() => {
+    const EDGE_PAGES = 3;
+    const shown = new Set();
+    for (let i = 1; i <= Math.min(EDGE_PAGES, safeTotalPages); i++) shown.add(i);
+    for (let i = Math.max(1, safeTotalPages - EDGE_PAGES + 1); i <= safeTotalPages; i++) shown.add(i);
+    for (let i = Math.max(1, currentPage - 1); i <= Math.min(safeTotalPages, currentPage + 1); i++) {
+      shown.add(i);
+    }
+    const sorted = Array.from(shown).sort((a, b) => a - b);
+    const nums = [];
+    sorted.forEach((n, idx) => {
+      const prev = sorted[idx - 1];
+      if (prev !== undefined && n - prev === 2) nums.push(prev + 1);
+      else if (prev !== undefined && n - prev > 2) nums.push(`ellipsis-${prev}`);
+      nums.push(n);
+    });
+    return nums;
+  }, [safeTotalPages, currentPage]);
+
   // +1 for the Payment Status column.
   // Includes the No. of Rooms column.
   const colSpan = role === "admin" ? 14 : 13;
 
-  // Notification cell renderer — maps the composite gov-employee status onto
-  // the shared StatusPill badges so it matches the Hotel/LongStay skin. The
-  // page keeps its own "Confirmed / Cancelled" composite label.
+  // Notification cell renderer — same look as the Notification cell on
+  // /booking-details/hotel-booking-list (plain coloured text, no pill). The
+  // label still comes from compositeStatus, so the page keeps its own
+  // "Confirmed / Cancelled" composite and stays in step with the Payment
+  // Status column.
   const renderNotification = (b) => {
     const status = compositeStatus(b);
-    const metaKey =
-      status.kind === "confirmed"
-        ? "CONFIRMED"
-        : status.kind === "cancelled"
-        ? "CANCELLED"
-        : status.kind === "notconfirmed"
-        ? "NOTCONFIRMED"
-        : status.kind === "onrequest"
-        ? "ONREQUEST"
-        : null;
-    const meta = metaKey
-      ? { ...STATUS_META[metaKey], label: status.label }
-      : null;
-    if (!meta) {
+    if (status.kind === "confirmed" || status.kind === "onrequest") {
       return (
-        <span className="text-muted" style={{ fontSize: "0.8rem" }}>
+        <span
+          style={{
+            ...NOTIFICATION_TEXT_STYLE,
+            color: status.kind === "onrequest" ? "#e67e22" : "#06a301",
+            fontSize: "0.82rem",
+          }}
+        >
           {status.label}
         </span>
       );
     }
+    const isNotConfirmed = status.kind === "notconfirmed";
     return (
-      <span className="d-inline-flex align-items-center gap-1">
-        <StatusPill meta={meta} raw={status.label} />
-        {status.kind === "notconfirmed" && (
-          <FaExclamationCircle style={{ color: "#ff9800", fontSize: "15px" }} />
+      <div
+        className="d-inline-flex align-items-center justify-content-center gap-2"
+        style={{
+          padding: "0.32rem 0.6rem",
+          borderRadius: "0.375rem",
+          color: isNotConfirmed ? "#dc3545" : "#6c757d",
+          fontSize: "0.72rem",
+          fontWeight: "600",
+        }}
+      >
+        {isNotConfirmed ? (
+          <>
+            <span>{status.label}</span>
+            <FaExclamationCircle style={{ color: "#ff9800", fontSize: "15px" }} />
+          </>
+        ) : (
+          // Cancelled and combined statuses: each segment coloured on its own.
+          renderColoredStatus(status.label)
         )}
-      </span>
+      </div>
     );
   };
 
@@ -602,19 +660,20 @@ export default function GovEmployeeBookingList() {
               </Card>
             </div>
 
-            {/* Booking Type filter */}
+            {/* Booking Type + Check-in Date filters — same card as the Hotel /
+                Long Stay / Day Stay booking lists. */}
             <Row className="mb-2 g-1">
               <Col xs={12}>
                 <Card className="shadow-sm border-0 w-100" style={{ borderRadius: "8px" }}>
                   <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Booking Type
-                    </h6>
-                    <Row className="g-2">
+                    <Row className="g-2 align-items-end">
                       <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Booking Type
+                        </h6>
                         <Form.Select
                           value={bookingType}
                           onChange={(e) => {
@@ -631,6 +690,37 @@ export default function GovEmployeeBookingList() {
                             </option>
                           ))}
                         </Form.Select>
+                      </Col>
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Check-in Date
+                        </h6>
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={checkInDateFilter}
+                            onChange={(e) => {
+                              setCheckInDateFilter(e.target.value);
+                              setPage(0);
+                            }}
+                            size="sm"
+                            aria-label="Check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px" }}
+                          />
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={handleClearFilters}
+                            disabled={!clientFilterActive}
+                            aria-label="Clear all filters"
+                            style={{ fontSize: "0.85rem", height: "46px", whiteSpace: "nowrap" }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Card.Body>
@@ -934,6 +1024,9 @@ export default function GovEmployeeBookingList() {
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.notification,
+                                    // Keep each status on one line, as on the
+                                    // hotel list's Notification cell.
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {renderNotification(b)}
@@ -1001,38 +1094,34 @@ export default function GovEmployeeBookingList() {
                         ))}
                       </Form.Select>
                     </div>
-                    {totalPages > 1 && (
-                      <Pagination className="mb-0">
-                        <Pagination.Prev
-                          disabled={currentPage === 1}
-                          onClick={() => currentPage > 1 && handlePageChange(currentPage - 1)}
-                          style={{
-                            cursor: currentPage === 1 ? "not-allowed" : "pointer",
-                            opacity: currentPage === 1 ? 0.5 : 1,
-                          }}
-                        />
-                        {Array.from({ length: safeTotalPages }, (_, i) => i + 1).map((pageNumber) => (
+                    {/* The /new-booking/hotel pager (pagination-modern) —
+                        same as /booking-details/hotel-booking-list, shown
+                        even when everything fits on one page. */}
+                    <Pagination className="mb-0 pagination-modern">
+                      <Pagination.Prev
+                        disabled={currentPage === 1}
+                        onClick={() => currentPage > 1 && handlePageChange(currentPage - 1)}
+                      />
+                      {pageNumbers.map((n) =>
+                        typeof n === "number" ? (
                           <Pagination.Item
-                            key={pageNumber}
-                            active={currentPage === pageNumber}
-                            onClick={() => handlePageChange(pageNumber)}
-                            style={{ cursor: "pointer", minWidth: "38px", textAlign: "center" }}
+                            key={n}
+                            active={n === currentPage}
+                            onClick={() => handlePageChange(n)}
                           >
-                            {pageNumber}
+                            {n}
                           </Pagination.Item>
-                        ))}
-                        <Pagination.Next
-                          disabled={currentPage === safeTotalPages}
-                          onClick={() =>
-                            currentPage < safeTotalPages && handlePageChange(currentPage + 1)
-                          }
-                          style={{
-                            cursor: currentPage === safeTotalPages ? "not-allowed" : "pointer",
-                            opacity: currentPage === safeTotalPages ? 0.5 : 1,
-                          }}
-                        />
-                      </Pagination>
-                    )}
+                        ) : (
+                          <Pagination.Ellipsis key={n} disabled />
+                        ),
+                      )}
+                      <Pagination.Next
+                        disabled={currentPage >= safeTotalPages}
+                        onClick={() =>
+                          currentPage < safeTotalPages && handlePageChange(currentPage + 1)
+                        }
+                      />
+                    </Pagination>
                   </div>
                 </Card.Body>
               </Card>

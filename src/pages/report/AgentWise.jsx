@@ -17,6 +17,12 @@ import Country from "../../components/filters/Country";
 import Supplier from "../../components/filters/Supplier";
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
+import { getPaginationItems } from "../../utils/paginationItems";
+
+// Hotel category as the Hotel Category dropdown names it. The rows' hotelCategory
+// is the category id (what the filter sends), so the name comes in hotelCategoryName.
+const categoryName = (booking) =>
+  booking.hotelCategoryName ?? booking.hotelCategory ?? booking.HotelCategory ?? "";
 
 function AgentWise() {
 
@@ -24,7 +30,7 @@ const [inhouseBookings,setInhouseBookings] = useState([]);
 const [showMailModal, setShowMailModal] = useState(false);
 const [emailAddress, setEmailAddress] = useState("");
 const [isSending, setIsSending] = useState(false);
-const [reportType,setReportType] = useState(null);
+const [reportType,setReportType] = useState('inhouse');
 
 const activeRole = (sessionStorage.getItem("currentActiveRole") || "").trim().toUpperCase();
 const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
@@ -226,7 +232,7 @@ const handleSendEmail = async () => {
                     <td>${escapeHtml(booking.agentName)}</td>
                     <td>${escapeHtml(booking.hotelName)}</td>
                     <td>${escapeHtml(booking.hotelType)}</td>
-                    <td>${escapeHtml(booking.HotelCategory)}</td>
+                    <td>${escapeHtml(categoryName(booking))}</td>
                     <td>${escapeHtml(booking.roomCategory)}</td>
                     <td>${escapeHtml(booking.noOfBooking)}</td>
                     <td>${escapeHtml(booking.cancelledBooking)}</td>
@@ -272,7 +278,7 @@ const handleSendEmail = async () => {
         booking.agentName,
         booking.hotelName,
         booking.hotelType,
-        booking.HotelCategory,
+        categoryName(booking),
         booking.roomCategory,
         booking.noOfBooking,
         booking.cancelledBooking
@@ -319,7 +325,7 @@ const handleSendEmail = async () => {
           booking.agentName,
           booking.hotelName,
           booking.hotelType,
-          booking.HotelCategory,
+          categoryName(booking),
           booking.roomCategory,
           booking.noOfBooking,
           booking.cancelledBooking
@@ -467,8 +473,7 @@ const apiBookings = [
           (a.agentName && String(a.agentName).toLowerCase().includes(search)) ||
           (a.hotelName && String(a.hotelName).toLowerCase().includes(search)) ||
           (a.hotelType && String(a.hotelType).toLowerCase().includes(search)) ||
-          (a.hotelCategory && String(a.hotelCategory).toLowerCase().includes(search)) ||
-          (a.HotelCategory && String(a.HotelCategory).toLowerCase().includes(search)) ||
+          String(categoryName(a)).toLowerCase().includes(search) ||
           (a.roomCategory && String(a.roomCategory).toLowerCase().includes(search)) ||
           (a.hotelCity && String(a.hotelCity).toLowerCase().includes(search)) ||
           (a.hotelCountry && String(a.hotelCountry).toLowerCase().includes(search)) ||
@@ -682,6 +687,7 @@ const apiBookings = [
                       type="radio"
                       label="Inhouse"
                       name="reportType"
+                      checked={reportType === 'inhouse'}
                       onChange={() => {
                         setReportType('inhouse');
                         setTempBookingFilters(initialBookingFilters);
@@ -752,7 +758,7 @@ const apiBookings = [
                         </div>
                       </Form.Group>
                     </Col>
-                    <Col md={4}>
+                    {/* <Col md={4}>
                       <Form.Group className="mb-0">
                         <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
                         <div className="d-flex gap-2">
@@ -764,7 +770,7 @@ const apiBookings = [
                             onChange={(e) => updateBookingFilter("deadlineDateTo", e.target.value)} />
                         </div>
                       </Form.Group>
-                    </Col>
+                    </Col> */}
                     <Col md={4}>
                       <Form.Group className="mb-0">
                         <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
@@ -793,15 +799,15 @@ const apiBookings = [
                         </div>
                       </Form.Group>
                     </Col>
-                    <Col md={8} />
+                    {/* <Col md={8} /> */}
 
                     {/* Row 3 — reference / guest text filters */}
-                    <Col md={4}>
+                    {/* <Col md={4}>
                       <Form.Control size="sm" placeholder="Booking Reference"
                         value={tempBookingFilters.bookingReference}
                         onChange={(e) => updateBookingFilter("bookingReference", e.target.value)} />
-                    </Col>
-                    <Col md={4}>
+                    </Col> */}
+                    {/* <Col md={4}>
                       <Form.Control size="sm" placeholder="Supplier Reference No."
                         value={tempBookingFilters.supplierReference}
                         onChange={(e) => updateBookingFilter("supplierReference", e.target.value)} />
@@ -810,10 +816,10 @@ const apiBookings = [
                       <Form.Control size="sm" placeholder="Guest Name"
                         value={tempBookingFilters.guestName}
                         onChange={(e) => updateBookingFilter("guestName", e.target.value)} />
-                    </Col>
+                    </Col> */}
 
                     {/* Row 4 — branch / status / supplier */}
-                    <Col md={4}>
+                    <Col md={3}>
                       <Form.Select size="sm"
                         value={tempBookingFilters.branch}
                         onChange={(e) => updateBookingFilter("branch", e.target.value)}>
@@ -823,7 +829,7 @@ const apiBookings = [
                         ))}
                       </Form.Select>
                     </Col>
-                    <Col md={4}>
+                    {/* <Col md={3}>
                       <Form.Select size="sm"
                         value={tempBookingFilters.status}
                         onChange={(e) => updateBookingFilter("status", e.target.value)}>
@@ -834,8 +840,8 @@ const apiBookings = [
                         <option value="SOLD_OUT">Sold Out</option>
                         <option value="CANCELLED">Cancelled</option>
                       </Form.Select>
-                    </Col>
-                    <Col md={4}>
+                    </Col> */}
+                    <Col md={3}>
                       <Supplier
                         value={tempBookingFilters.supplierId}
                         onChange={(id) => updateBookingFilter("supplierId", String(id))}
@@ -843,7 +849,7 @@ const apiBookings = [
                     </Col>
 
                     {/* Row 5 — service type */}
-                    <Col md={4}>
+                    {/* <Col md={3}>
                       <Form.Select size="sm"
                         value={tempBookingFilters.bookingType}
                         onChange={(e) => updateBookingFilter("bookingType", e.target.value)}>
@@ -851,7 +857,7 @@ const apiBookings = [
                         <option value="NORMAL">Normal</option>
                         <option value="LAST_MINUTE">Last Minute</option>
                       </Form.Select>
-                    </Col>
+                    </Col> */}
                     <Col md={8} />
                   </Row>
 
@@ -923,19 +929,37 @@ const apiBookings = [
                     </Col>
 
                     {/* Search / Reset Buttons */}
-                    <Col md={12} className="d-flex justify-content-end gap-2 mt-3">
+                    {/* <Col md={12} className="d-flex justify-content-end gap-2 mt-3">
                       <Button variant="success" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
                         <i className="fas fa-search me-1"></i>Search
                       </Button>
                       <Button variant="outline-secondary" size="sm" onClick={handleReset}>
                         <i className="fas fa-undo me-1"></i>Reset
                       </Button>
-                    </Col>
+                    </Col> */}
                   </Row>
 
-                  {/* Action Buttons */}
-                  <Row className="mt-4">
-                    <Col md={12} className="d-flex gap-2 justify-content-end">
+                  {/* Table search on the left; Search / Reset next to the export buttons */}
+                  <Row className="mt-4 align-items-center g-2">
+                    <Col md={2}>
+                      <input
+                        type="text"
+                        value={tempSearchQuery}
+                        onChange={(e)=>{
+                          setTempSearchQuery(e.target.value);
+                          setSearchInhouseQuery(e.target.value);
+                        }}
+                        placeholder="search here"
+                        className="form-control form-control-sm"
+                      />
+                    </Col>
+                    <Col md={10} className="d-flex flex-wrap gap-2 justify-content-end">
+                      <Button variant="success" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767", minWidth: 120 }} onClick={handleSearch}>
+                        <i className="fas fa-search me-1"></i>Search
+                      </Button>
+                      <Button variant="outline-secondary" size="sm" style={{ minWidth: 120 }} onClick={handleReset}>
+                        <i className="fas fa-undo me-1"></i>Reset
+                      </Button>
                       <Button variant="outline-primary" size="sm" onClick={() => setShowMailModal(true)}>
                         <i className="fas fa-envelope me-1"></i>Mail
                       </Button>
@@ -952,7 +976,7 @@ const apiBookings = [
                   </Row>
 
                   {/* Search Input (filters live as the user types) */}
-                  <Row className="mt-3">
+                  {/* <Row className="mt-3">
                     <Col className="d-flex justify-content-end">
                       <input
                         type="text"
@@ -965,7 +989,7 @@ const apiBookings = [
                         className="form-control form-control-sm w-auto"
                       />
                     </Col>
-                  </Row>
+                  </Row> */}
                 </>
               )}
 
@@ -1148,7 +1172,7 @@ const apiBookings = [
                             <td>{booking.agentName}</td>
                             <td>{booking.hotelName}</td>
                             <td>{booking.hotelType}</td>
-                            <td>{booking.hotelCategory || booking.HotelCategory}</td>
+                            <td>{categoryName(booking)}</td>
                             <td>{booking.roomCategory}</td>
                             <td>{booking.noOfBooking}</td>
                             <td>{booking.cancelledBooking}</td>
@@ -1176,28 +1200,19 @@ const apiBookings = [
                         <Pagination.Prev onClick={()=> setInhouseCurrentPage(prev=> Math.max(1,prev-1))}
                           disabled={inhousecurrentPage === 1}/>
 
-                        {Array.from({length:Inhousetotalpages},(_,i)=>i+1).map((pageNum)=>{
-                          if(
-                            pageNum === 1||
-                            pageNum === Inhousetotalpages ||
-                            (pageNum >= inhousecurrentPage -1 && pageNum <=inhousecurrentPage+1)
-                          ){
-                            return(
-                              <Pagination.Item
-                              key={pageNum}
-                              active={pageNum === inhousecurrentPage}
-                              onClick={()=>setInhouseCurrentPage(pageNum)}>
-                                {pageNum}
-                              </Pagination.Item>
-                            )
-                          }else if(
-                            pageNum === inhousecurrentPage -2||
-                            pageNum === inhousecurrentPage +2
-                          ){
-                            return <Pagination.Ellipsis key={pageNum}/>
-                          }
-                          return null;
-                        })}
+                        {getPaginationItems(Inhousetotalpages, inhousecurrentPage).map((item) =>
+                          typeof item === "string" ? (
+                            <Pagination.Ellipsis key={item} disabled />
+                          ) : (
+                            <Pagination.Item
+                              key={item}
+                              active={item === inhousecurrentPage}
+                              onClick={() => setInhouseCurrentPage(item)}
+                            >
+                              {item}
+                            </Pagination.Item>
+                          )
+                        )}
 
                         <Pagination.Next onClick={()=> setInhouseCurrentPage(prev=>Math.min(Inhousetotalpages,prev+1))}
                           disabled={inhousecurrentPage === Inhousetotalpages || Inhousetotalpages === 0}/>
@@ -1260,28 +1275,19 @@ const apiBookings = [
                         <Pagination.Prev onClick={()=>setApiCurrentPage(prev =>Math.max(1,prev-1))}
                           disabled={apicurrentPage === 1}/>
 
-                        {Array.from({length:Apitotalpages},(_,i)=>i+1).map((pageNum)=>{
-                          if(
-                            pageNum === 1||
-                            pageNum === Apitotalpages||
-                            (pageNum >= apicurrentPage -1 && pageNum <=apicurrentPage+1)
-                          ){
-                            return(
-                              <Pagination.Item
-                              key={pageNum}
-                              active={pageNum===apicurrentPage}
-                              onClick={()=>setApiCurrentPage(pageNum)}>
-                                {pageNum}
-                              </Pagination.Item>
-                            )
-                          }else if(
-                            pageNum === apicurrentPage -2||
-                            pageNum === apicurrentPage +2
-                          ){
-                            return <Pagination.Ellipsis key={pageNum}/>
-                          }
-                          return null;
-                        })}
+                        {getPaginationItems(Apitotalpages, apicurrentPage).map((item) =>
+                          typeof item === "string" ? (
+                            <Pagination.Ellipsis key={item} disabled />
+                          ) : (
+                            <Pagination.Item
+                              key={item}
+                              active={item === apicurrentPage}
+                              onClick={() => setApiCurrentPage(item)}
+                            >
+                              {item}
+                            </Pagination.Item>
+                          )
+                        )}
 
                         <Pagination.Next onClick={()=>setApiCurrentPage(prev =>Math.min(Apitotalpages,prev+1))}
                           disabled={apicurrentPage === Apitotalpages || Apitotalpages === 0}/>

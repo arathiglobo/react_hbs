@@ -2,44 +2,52 @@ import { useEffect, useState } from "react";
 import { Form } from "react-bootstrap";
 import axiosInstance from "../AxiosInstance";
 
+const RESULT_LIMIT = 50;
+const SEARCH_DELAY_MS = 300;
+
+// There are far more destinations than can be loaded up front, so the list is
+// searched on the server as the user types instead of filtered locally.
+// onChange(id, place) also hands back the selected place ({ id, name, country, ... }).
 export default function Place({ value, onChange }) {
   const [places, setPlaces] = useState([]);
+  const [selected, setSelected] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const fetchPlaces = async () => {
+    if (!isOpen) return undefined;
+    const term = searchTerm.trim();
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setIsLoading(true);
       try {
-        setIsLoading(true);
-        const res = await axiosInstance.get("/api/destination?page=0&limit=1000");
-        if (Array.isArray(res.data)) {
-          setPlaces(res.data.filter(p => p && !p.isDeleted));
-        } else {
-          setPlaces([]);
+        const params = { page: 0, limit: RESULT_LIMIT };
+        if (term) params.search = term;
+        const res = await axiosInstance.get("/api/destination", { params });
+        if (!cancelled) {
+          setPlaces(Array.isArray(res.data) ? res.data.filter((p) => p && !p.isDeleted) : []);
         }
       } catch (err) {
         console.error("Error fetching places:", err);
-        try {
-          const res = await axiosInstance.get("/api/destination?page=0&limit=100");
-          if (Array.isArray(res.data)) {
-            setPlaces(res.data.filter(p => p && !p.isDeleted));
-          }
-        } catch (retryErr) {
-          console.error("Retry also failed:", retryErr);
-          setPlaces([]);
-        }
+        if (!cancelled) setPlaces([]);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
+    }, term ? SEARCH_DELAY_MS : 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
     };
-    fetchPlaces();
-  }, []);
+  }, [searchTerm, isOpen]);
 
-  const filtered = searchTerm 
-    ? places.filter(p => p.name?.toLowerCase().includes(searchTerm.toLowerCase()))
-    : places;
-  const selectedOption = places.find(opt => String(opt.id) === String(value));
+  const selectedName =
+    value && selected && String(selected.id) === String(value) ? selected.name : "";
+
+  const close = () => {
+    setIsOpen(false);
+    setSearchTerm("");
+  };
 
   return (
     <Form.Group>
@@ -47,34 +55,38 @@ export default function Place({ value, onChange }) {
       <div className="position-relative">
         <Form.Control
           size="sm"
-          value={isOpen ? searchTerm : (selectedOption?.name || "")}
+          value={isOpen ? searchTerm : selectedName}
           onChange={(e) => {
             setSearchTerm(e.target.value);
             if (!isOpen) setIsOpen(true);
           }}
           onFocus={() => setIsOpen(true)}
-          placeholder={isLoading ? "Loading..." : "Select"}
+          placeholder={isOpen && selectedName ? selectedName : "Select"}
           autoComplete="off"
-          disabled={isLoading}
         />
-        {isOpen && !isLoading && (
+        {isOpen && (
           <>
-            <div className="position-absolute w-100 bg-white border shadow-lg" 
+            <div className="position-absolute w-100 bg-white border shadow-lg"
                  style={{ zIndex: 1050, maxHeight: "200px", overflowY: "auto", top: "100%" }}>
-              {filtered.length > 0 ? filtered.map(opt => (
-                <div key={opt.id} className="px-3 py-2" 
+              {isLoading ? (
+                <div className="px-3 py-2 text-muted">Searching...</div>
+              ) : places.length > 0 ? places.map((opt) => (
+                <div key={opt.id} className="px-3 py-2"
                      style={{ cursor: "pointer" }}
-                     onMouseEnter={e => e.target.style.backgroundColor = "#f8f9fa"}
-                     onMouseLeave={e => e.target.style.backgroundColor = "white"}
-                     onClick={() => { onChange(opt.id); setIsOpen(false); setSearchTerm(""); }}>
+                     onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#f8f9fa"; }}
+                     onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "white"; }}
+                     onClick={() => { setSelected(opt); onChange(opt.id, opt); close(); }}>
                   {opt.name}
+                  {opt.country && <small className="text-muted ms-1">({opt.country})</small>}
                 </div>
               )) : (
-                <div className="px-3 py-2 text-muted">No places available</div>
+                <div className="px-3 py-2 text-muted">
+                  {searchTerm.trim() ? "No matching places" : "Type to search places"}
+                </div>
               )}
             </div>
             <div className="position-fixed" style={{ top: 0, left: 0, right: 0, bottom: 0, zIndex: 1040 }}
-                 onClick={() => { setIsOpen(false); setSearchTerm(""); }} />
+                 onClick={close} />
           </>
         )}
       </div>

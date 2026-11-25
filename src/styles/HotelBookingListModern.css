@@ -169,6 +169,38 @@
   border-color: #ECECE8 !important;
 }
 
+/* ── Orange pager (1 2 3 … 28 29 30) ──
+   A list that opts in with className="pagination-modern" (Hotel Booking
+   List, 24 Hour, Religious) gets the HotelSearch.css pager used on the
+   report pages. The chip rules above are !important, so this block puts
+   that look back for the opted-in pager only; pagers without the class
+   keep the chips. */
+.hbl-modern .pagination-modern { gap: 0; }
+.hbl-modern .pagination-modern .page-link {
+  border: none !important;
+  border-radius: 8px !important;
+  color: #F75E00 !important;
+  background: #fff !important;
+  padding: 8px 12px !important;
+  margin: 0 4px;
+  font-weight: 400;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+}
+.hbl-modern .pagination-modern .page-link:hover {
+  background: #F75E00 !important;
+  color: #fff !important;
+  transform: translateY(-1px);
+}
+.hbl-modern .pagination-modern .page-item.active .page-link {
+  background: #F75E00 !important;
+  color: #fff !important;
+}
+.hbl-modern .pagination-modern .page-item.disabled .page-link {
+  background: var(--bs-pagination-disabled-bg) !important;
+  color: var(--bs-pagination-disabled-color) !important;
+}
+
 /* ── Empty / loading row ── */
 .hbl-modern .text-center.py-5 { padding: 48px 12px !important; color: #9A9A95; }
 

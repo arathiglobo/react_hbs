@@ -20,6 +20,7 @@ import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
+import { getPaginationItems } from "../../utils/paginationItems";
 
 export default function BookingReport() {
 
@@ -57,6 +58,9 @@ const initialFilters = {
 
 // Temporary filter state (what user sees/edits)
 const [tempFilters, setTempFilters] = useState(initialFilters);
+// Filters behind the rows on screen (set on Search / Reset) — what Mail sends,
+// so the email matches the table even if the inputs were edited afterwards.
+const [appliedFilters, setAppliedFilters] = useState(initialFilters);
 
 // Branch dropdown options, collected from the unfiltered booking list
 const [branchOptions, setBranchOptions] = useState([]);
@@ -103,11 +107,13 @@ const fetchBookings = async (filters = {}) => {
 
 const handleSearch = async () => {
   setCurrentPage(1);
+  setAppliedFilters(tempFilters);
   await fetchBookings(tempFilters);
 };
 
 const handleReset = async () => {
   setTempFilters(initialFilters);
+  setAppliedFilters(initialFilters);
   setSearchQuery("");
   setCurrentPage(1);
   await fetchBookings();
@@ -122,22 +128,35 @@ const handleReset = async () => {
     }
     setIsSending(true);
     try {
-      // API call to send email
+      // Same filters as the rows on screen, plus the "Search here" text —
+      // the backend re-runs the report with them.
+      const filters = {};
+      Object.entries(appliedFilters).forEach(([key, value]) => {
+        const trimmed = typeof value === "string" ? value.trim() : value;
+        if (trimmed !== "" && trimmed !== null && trimmed !== undefined) {
+          filters[key] = trimmed;
+        }
+      });
+      if (searchQuery.trim()) filters.searchQuery = searchQuery.trim();
+
       const response = await axiosInstance.post("/api/reports/send-email", {
-        email: emailAddress,
+        email: emailAddress.trim(),
         reportType: "booking",
-        filters: {
-          // add your filter data here
-        },
+        filters,
       });
 
       if (response.data) {
-        toast.success("Report sent successfully!");
+        const count = response.data.recordCount;
+        toast.success(
+          typeof count === "number"
+            ? `Report sent successfully (${count} booking${count === 1 ? "" : "s"})`
+            : "Report sent successfully!",
+        );
         setShowMailModal(false);
         setEmailAddress("");
       }
     } catch (error) {
-      toast.error("Failed to send email");
+      toast.error(error?.response?.data?.message || "Failed to send email");
     } finally {
       setIsSending(false);
     }
@@ -316,7 +335,9 @@ const totalPages = useMemo(() => Math.ceil(filteredbookings.length / itemsPerPag
 const startIndex = useMemo(() => (currentPage - 1) * itemsPerPage, [currentPage, itemsPerPage]);
 const endIndex = useMemo(() => startIndex + itemsPerPage, [startIndex, itemsPerPage]);
 const currentBookings = useMemo(() => filteredbookings.slice(startIndex, endIndex), [filteredbookings, startIndex, endIndex]);
-  
+
+const paginationItems = useMemo(() => getPaginationItems(totalPages, currentPage), [totalPages, currentPage]);
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -401,7 +422,7 @@ const currentBookings = useMemo(() => filteredbookings.slice(startIndex, endInde
                     </div>
                   </Form.Group>
                 </Col>
-                <Col md={4} />
+                {/* <Col md={4} /> */}
 
                 {/* Row 3 — reference / city text filters */}
                 <Col md={4}>
@@ -409,11 +430,11 @@ const currentBookings = useMemo(() => filteredbookings.slice(startIndex, endInde
                     value={tempFilters.bookingReference}
                     onChange={(e) => updateFilter("bookingReference", e.target.value)} />
                 </Col>
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Supplier Reference No."
                     value={tempFilters.supplierReference}
                     onChange={(e) => updateFilter("supplierReference", e.target.value)} />
-                </Col>
+                </Col> */}
                 <Col md={4}>
                   <DestinationCity
                     value={tempFilters.city}
@@ -427,11 +448,11 @@ const currentBookings = useMemo(() => filteredbookings.slice(startIndex, endInde
                     value={tempFilters.guestName}
                     onChange={(e) => updateFilter("guestName", e.target.value)} />
                 </Col>
-                <Col md={4}>
+                {/* <Col md={4}>
                   <Form.Control size="sm" placeholder="Service Name"
                     value={tempFilters.serviceName}
                     onChange={(e) => updateFilter("serviceName", e.target.value)} />
-                </Col>
+                </Col> */}
                 <Col md={4}>
                   <Form.Select size="sm"
                     value={tempFilters.branch}
@@ -472,71 +493,39 @@ const currentBookings = useMemo(() => filteredbookings.slice(startIndex, endInde
                   </Form.Select>
                 </Col>
 
-                {/* Row 6 — actions */}
-                <Col md={4}>
-                  <Button variant="success" className="w-100" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
+              </Row>
+
+              {/* Table search on the left; Search / Reset next to the export buttons */}
+              <Row className="mt-4 align-items-center g-2">
+                <Col md={2}>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search here"
+                    className="form-control form-control-sm"
+                  />
+                </Col>
+                <Col md={10} className="d-flex flex-wrap gap-2 justify-content-end">
+                  <Button variant="success" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767", minWidth: 120 }} onClick={handleSearch}>
                     <i className="fas fa-search me-1"></i>Search
                   </Button>
-                </Col>
-                <Col md={4}>
-                  <Button variant="outline-secondary" className="w-100" size="sm" onClick={handleReset}>
+                  <Button variant="outline-secondary" size="sm" style={{ minWidth: 120 }} onClick={handleReset}>
                     <i className="fas fa-undo me-1"></i>Reset
                   </Button>
+                  <Button variant="outline-primary" size="sm" onClick={() => setShowMailModal(true)}>
+                    <i className="fas fa-envelope me-1"></i>Mail
+                  </Button>
+                  <Button variant="outline-secondary" size="sm" onClick={handlePrint}>
+                    <i className="fas fa-print me-1"></i>Print
+                  </Button>
+                  <Button variant="outline-danger" size="sm" onClick={handlePDF}>
+                    <i className="fas fa-file-pdf me-1"></i>PDF
+                  </Button>
+                  <Button variant="outline-success" size="sm" onClick={handleExcel}>
+                    <i className="fas fa-file-excel me-1"></i>Excel
+                  </Button>
                 </Col>
-
-                <Col md={12} className="mb-0">
-  <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-
-    {/* LEFT SIDE - SEARCH */}
-    <div>
-      <input
-        type="text"
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder="Search here"
-        className="form-control form-control-sm"
-        style={{ width: "200px" }}
-      />
-    </div>
-
-    {/* RIGHT SIDE - BUTTONS */}
-    <div className="d-flex gap-2">
-      <Button
-        variant="outline-primary"
-        size="sm"
-        onClick={() => setShowMailModal(true)}
-      >
-        <i className="fas fa-envelope me-1"></i>Mail
-      </Button>
-
-      <Button
-        variant="outline-secondary"
-        size="sm"
-        onClick={handlePrint}
-      >
-        <i className="fas fa-print me-1"></i>Print
-      </Button>
-
-      <Button
-        variant="outline-danger"
-        size="sm"
-        onClick={handlePDF}
-      >
-        <i className="fas fa-file-pdf me-1"></i>PDF
-      </Button>
-
-      <Button
-        variant="outline-success"
-        size="sm"
-        onClick={handleExcel}
-      >
-        <i className="fas fa-file-excel me-1"></i>Excel
-      </Button>
-    </div>
-
-  </div>
-</Col>
-               
               </Row>
             </div>
 
@@ -583,29 +572,19 @@ Showing {filteredbookings.length>0 ? startIndex +1:0} to {Math.min(endIndex, fil
                   <Pagination className="mb-0">
                     <Pagination.Prev onClick={()=> setCurrentPage(prev => Math.max(1, prev -1))}
                       disabled={currentPage === 1}/>
-                    {Array.from({length:totalPages},(_,i)=>i+1).map((pageNum)=>{
-                      if(
-                        pageNum ===1||
-                        pageNum ===totalPages||
-                        (pageNum >= currentPage -1&&pageNum<=currentPage+1)
-                      ){
-                        return(
-                               <Pagination.Item
-                               key={pageNum}
-                               active={pageNum===currentPage}
-                               onClick={()=>setCurrentPage(pageNum)} >
-                                {pageNum}
-                                </Pagination.Item>
-                        )
-                      }else if(
-                          pageNum === currentPage -2 ||
-                          pageNum === currentPage +2 
+                    {paginationItems.map((item) =>
+                      typeof item === "string" ? (
+                        <Pagination.Ellipsis key={item} disabled />
+                      ) : (
+                        <Pagination.Item
+                          key={item}
+                          active={item === currentPage}
+                          onClick={() => setCurrentPage(item)}
+                        >
+                          {item}
+                        </Pagination.Item>
                       )
-                      {
-                        return <Pagination.Ellipsis key={pageNum} />;
-                      }
-                      return null;
-                    })}
+                    )}
                     
                     <Pagination.Next onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages || totalPages === 0}/>

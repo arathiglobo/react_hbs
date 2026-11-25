@@ -9,7 +9,8 @@
  * Every rule is scoped under `.invoice-page` so the shell / print
  * overrides can never leak into another page once this stylesheet has
  * been loaded. No font sizes or colours are introduced here that
- * differ from the inline styles already used by Invoice.jsx.
+ * differ from the inline styles already used by Invoice.jsx, apart
+ * from the smaller cell font in the print rules at the end.
  * ════════════════════════════════════════════════════════════ */
 
 /* ── Screen fit ──
@@ -152,5 +153,41 @@
 
   .invoice-page .invoice-table-viewport {
     overflow: visible !important;
+  }
+
+  /* The booking-details "+" and the Proforma / Tax buttons do nothing on
+     paper; dropping them gives their width back to the data columns. */
+  .invoice-page .invoice-col-details,
+  .invoice-page .invoice-col-action {
+    display: none !important;
+  }
+
+  /* On screen the grid has fixed column widths and trims long values with
+     "…" so it never scrolls. On paper every value must be readable in full:
+     columns size to their content and cells wrap at spaces instead of being
+     cut. !important is needed to beat the inline cell styles. In landscape
+     every row fits on one line; in portrait long values wrap. */
+  .invoice-page .invoice-table {
+    table-layout: auto !important;
+  }
+
+  .invoice-page .invoice-table th,
+  .invoice-page .invoice-table td {
+    width: auto !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    padding: 0.25rem 0.4rem !important;
+  }
+
+  .invoice-page .invoice-table td {
+    font-size: 0.72rem !important;
+  }
+
+  /* Customer, agent and hotel names may hold one very long word; only these
+     may break inside a word, so the table can never run past the page edge.
+     Codes, dates and amounts only ever wrap at spaces. */
+  .invoice-page .invoice-table .invoice-col-wrap {
+    overflow-wrap: anywhere;
   }
 }

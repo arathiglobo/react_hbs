@@ -2,20 +2,18 @@ import React, { useState, useEffect } from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import BackButton from "../../components/BackButton";
-import { Row, Col, Card, Form, Button, Table } from "react-bootstrap";
+import { Row, Col, Card, Form, Button, Table, Modal } from "react-bootstrap";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import HotelFilter from "../../components/filters/Hotelfilters";
 import MarketType from "../../components/filters/MarketType";
-import Supplier from "../../components/filters/Supplier";
-import DestinationCity from "../../components/filters/DestinationCity";
 import { escapeHtml } from "../../utils/safeHtml";
 import { csvCell } from "../../utils/csvSafe";
 
 export default function Contractrate() {
-  const [contracts, setContracts] = useState([]);
+  const [allContracts, setAllContracts] = useState([]);
   const [marketTypes, setMarketTypes] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
 
@@ -28,12 +26,9 @@ export default function Contractrate() {
   const [filters, setFilters] = useState(initialFilters);
 
   // Booking-level search filters (sent to the search API) — a contract is
-  // listed when its hotel has at least one matching booking. Service Name is
-  // covered by the existing Hotel filter; the existing From/To Date filters
-  // the contract validity, which is separate from the Service (check-in) Date.
+  // listed when its hotel has at least one matching booking. The From/To Date
+  // under Contract Details filters the contract validity instead.
   const initialBookingFilters = {
-    serviceDateFrom: "",
-    serviceDateTo: "",
     bookingDateFrom: "",
     bookingDateTo: "",
     deadlineDateFrom: "",
@@ -42,19 +37,20 @@ export default function Contractrate() {
     reconfirmDateTo: "",
     cancelDateFrom: "",
     cancelDateTo: "",
-    bookingReference: "",
-    supplierReference: "",
-    city: "",
-    guestName: "",
-    branch: "",
     status: "",
-    supplierId: "",
     bookingType: "",
   };
   const [tempBookingFilters, setTempBookingFilters] = useState(initialBookingFilters);
 
-  // Branch dropdown options (distinct booking locations)
-  const [branchOptions, setBranchOptions] = useState([]);
+  // Filters behind the contracts on screen (set on Search / Reset), so the
+  // mailed report matches the list even if the inputs were edited afterwards
+  // without searching again.
+  const [appliedFilters, setAppliedFilters] = useState({});
+
+  // Mail modal
+  const [showMailModal, setShowMailModal] = useState(false);
+  const [emailAddress, setEmailAddress] = useState("");
+  const [isSending, setIsSending] = useState(false);
 
   const updateBookingFilter = (field, value) =>
     setTempBookingFilters((prev) => ({ ...prev, [field]: value }));
@@ -76,23 +72,12 @@ export default function Contractrate() {
   useEffect(() => {
     const loadInitial = async () => {
       try {
-        setContracts(await fetchContracts());
+        setAllContracts(await fetchContracts());
       } catch (e) {
         console.error(e);
       }
     };
     loadInitial();
-
-    // Branch dropdown options come from the distinct booking locations
-    const fetchBranches = async () => {
-      try {
-        const response = await axiosInstance.get("/api/report/bookings/branches");
-        setBranchOptions(Array.isArray(response.data) ? response.data : []);
-      } catch (error) {
-        console.error("Branch options fetch error", error);
-      }
-    };
-    fetchBranches();
   }, []);
 
   // Fetch market types for display purposes
@@ -115,16 +100,42 @@ export default function Contractrate() {
       .join(", ");
   };
 
+  // "search here" box: narrows the contracts on screen by the text they show
+  // (rate code, market type, validity, room type and rates). Print, PDF,
+  // Excel and Mail all use this narrowed list.
+  const [searchQuery, setSearchQuery] = useState("");
+  const needle = searchQuery.trim().toLowerCase();
+  const contracts = !needle
+    ? allContracts
+    : allContracts.filter((c) => {
+        const texts = [
+          c.rateCode,
+          getMarketTypeNames(c.markeType),
+          ...(c.contractRateValidityDTO || []).flatMap((v) => [v.validityFrom, v.validityTo]),
+          ...(c.contractRateRoomDTO || []).flatMap((r) => [
+            r.meal ? "Room with Breakfast" : "Room Only",
+            r.rate,
+            r.adultRate,
+            r.childRate,
+          ]),
+        ];
+        return texts.some(
+          (t) => t !== null && t !== undefined && String(t).toLowerCase().includes(needle)
+        );
+      });
+
   const handleSearch = async () => {
     setSearchLoading(true);
+    // Contract filters + booking-level filters, all applied server-side
+    const searched = { ...filters, ...tempBookingFilters };
+    setAppliedFilters(searched);
     try {
-      // Contract filters + booking-level filters, all applied server-side
-      const data = await fetchContracts({ ...filters, ...tempBookingFilters });
-      setContracts(data);
+      const data = await fetchContracts(searched);
+      setAllContracts(data);
       toast.success(`Found ${data.length} contract(s)`);
     } catch (e) {
       toast.error("Failed to fetch contracts");
-      setContracts([]);
+      setAllContracts([]);
     }
     setSearchLoading(false);
   };
@@ -132,11 +143,51 @@ export default function Contractrate() {
   const handleReset = async () => {
     setFilters(initialFilters);
     setTempBookingFilters(initialBookingFilters);
+    setAppliedFilters({});
+    setSearchQuery("");
     try {
-      setContracts(await fetchContracts());
+      setAllContracts(await fetchContracts());
     } catch (e) {
       console.error(e);
-      setContracts([]);
+      setAllContracts([]);
+    }
+  };
+
+  const openMailModal = () => {
+    if (!contracts.length) {
+      toast.error("No data available to email");
+      return;
+    }
+    setShowMailModal(true);
+  };
+
+  const handleSendEmail = async () => {
+    if (!emailAddress || !/^\S+@\S+\.\S+$/.test(emailAddress)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      // The server re-runs the search with the filters behind the list and
+      // applies the "search here" text the same way the screen does
+      const response = await axiosInstance.post("/api/reports/send-email", {
+        email: emailAddress,
+        reportType: "contractrate",
+        filters: { ...appliedFilters, searchQuery },
+        recordCount: contracts.length,
+      });
+      if (response.data) {
+        const sentCount = response.data.recordCount ?? contracts.length;
+        toast.success(`Report with ${sentCount} contract(s) sent successfully!`);
+        setShowMailModal(false);
+        setEmailAddress("");
+      }
+    } catch (error) {
+      console.error("Email send error:", error);
+      toast.error(error.response?.data?.message || "Failed to send mail");
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -307,6 +358,15 @@ export default function Contractrate() {
     toast.success("Excel file downloaded successfully");
   };
 
+  // Filter grid: 4 equal columns on wide screens (xxl), 2 per row below, so
+  // Booking Details and Contract Details line up field under field.
+  const filterCol = { md: 6, xxl: 3 };
+
+  // From/To date pair. minWidth 0 lets the two inputs share their column
+  // instead of spilling into the next field; the slimmer right padding keeps
+  // "dd-mm-yyyy" and the calendar icon visible at that width.
+  const dateInputStyle = { minWidth: 0, paddingRight: "0.5rem" };
+
   return (
     <div className="bg-light d-flex flex-column" style={{ minHeight: "100vh" }}>
       <TopBar />
@@ -325,34 +385,22 @@ export default function Contractrate() {
               <h6 className="fw-bold text-primary mb-3">Booking Details</h6>
               <Row className="align-items-end g-4 mb-4">
 
-                {/* Row 1 — Service / Booking / Cancellation Deadline dates */}
-                <Col md={4}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Service Date</Form.Label>
-                    <div className="d-flex gap-2">
-                      <Form.Control type="date" size="sm" title="From"
-                        value={tempBookingFilters.serviceDateFrom}
-                        onChange={(e) => updateBookingFilter("serviceDateFrom", e.target.value)} />
-                      <Form.Control type="date" size="sm" title="To"
-                        value={tempBookingFilters.serviceDateTo}
-                        onChange={(e) => updateBookingFilter("serviceDateTo", e.target.value)} />
-                    </div>
-                  </Form.Group>
-                </Col>
-                <Col md={4}>
+                {/* Booking Date / Cancel Date / Status / Service Type, on the
+                    same grid as Contract Details below */}
+                <Col {...filterCol}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Booking Date</Form.Label>
                     <div className="d-flex gap-2">
-                      <Form.Control type="date" size="sm" title="From"
+                      <Form.Control type="date" size="sm" title="From" style={dateInputStyle}
                         value={tempBookingFilters.bookingDateFrom}
                         onChange={(e) => updateBookingFilter("bookingDateFrom", e.target.value)} />
-                      <Form.Control type="date" size="sm" title="To"
+                      <Form.Control type="date" size="sm" title="To" style={dateInputStyle}
                         value={tempBookingFilters.bookingDateTo}
                         onChange={(e) => updateBookingFilter("bookingDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
                 </Col>
-                <Col md={4}>
+              {/*  <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
                     <div className="d-flex gap-2">
@@ -365,8 +413,6 @@ export default function Contractrate() {
                     </div>
                   </Form.Group>
                 </Col>
-
-                {/* Row 2 — Reconfirm / Cancel dates */}
                 <Col md={4}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
@@ -379,91 +425,53 @@ export default function Contractrate() {
                         onChange={(e) => updateBookingFilter("reconfirmDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
-                </Col>
-                <Col md={4}>
+                </Col>  */}
+
+                <Col {...filterCol}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">Cancel Date</Form.Label>
                     <div className="d-flex gap-2">
-                      <Form.Control type="date" size="sm" title="From"
+                      <Form.Control type="date" size="sm" title="From" style={dateInputStyle}
                         value={tempBookingFilters.cancelDateFrom}
                         onChange={(e) => updateBookingFilter("cancelDateFrom", e.target.value)} />
-                      <Form.Control type="date" size="sm" title="To"
+                      <Form.Control type="date" size="sm" title="To" style={dateInputStyle}
                         value={tempBookingFilters.cancelDateTo}
                         onChange={(e) => updateBookingFilter("cancelDateTo", e.target.value)} />
                     </div>
                   </Form.Group>
                 </Col>
-                <Col md={4} />
-
-                {/* Row 3 — reference / guest text filters */}
-                <Col md={4}>
-                  <Form.Control size="sm" placeholder="Booking Reference"
-                    value={tempBookingFilters.bookingReference}
-                    onChange={(e) => updateBookingFilter("bookingReference", e.target.value)} />
+                <Col {...filterCol}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Status</Form.Label>
+                    <Form.Select size="sm"
+                      value={tempBookingFilters.status}
+                      onChange={(e) => updateBookingFilter("status", e.target.value)}>
+                      <option value="">ALL</option>
+                      <option value="REQUESTED">Requested</option>
+                      <option value="CONFIRMED">Confirmed</option>
+                      <option value="RECONFIRMED">ReConfirmed</option>
+                      <option value="SOLD_OUT">Sold Out</option>
+                      <option value="CANCELLED">Cancelled</option>
+                    </Form.Select>
+                  </Form.Group>
                 </Col>
-                <Col md={4}>
-                  <Form.Control size="sm" placeholder="Supplier Reference No."
-                    value={tempBookingFilters.supplierReference}
-                    onChange={(e) => updateBookingFilter("supplierReference", e.target.value)} />
+                <Col {...filterCol}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Service Type</Form.Label>
+                    <Form.Select size="sm"
+                      value={tempBookingFilters.bookingType}
+                      onChange={(e) => updateBookingFilter("bookingType", e.target.value)}>
+                      <option value="">All Services</option>
+                      <option value="NORMAL">Normal</option>
+                      <option value="LAST_MINUTE">Last Minute</option>
+                    </Form.Select>
+                  </Form.Group>
                 </Col>
-                <Col md={4}>
-                  <Form.Control size="sm" placeholder="Guest Name"
-                    value={tempBookingFilters.guestName}
-                    onChange={(e) => updateBookingFilter("guestName", e.target.value)} />
-                </Col>
-
-                {/* Row 4 — city / branch / status */}
-                <Col md={4}>
-                  <DestinationCity
-                    value={tempBookingFilters.city}
-                    onChange={(cityName) => updateBookingFilter("city", cityName)}
-                  />
-                </Col>
-                <Col md={4}>
-                  <Form.Select size="sm"
-                    value={tempBookingFilters.branch}
-                    onChange={(e) => updateBookingFilter("branch", e.target.value)}>
-                    <option value="">Select Branch</option>
-                    {branchOptions.map((branch) => (
-                      <option key={branch} value={branch}>{branch}</option>
-                    ))}
-                  </Form.Select>
-                </Col>
-                <Col md={4}>
-                  <Form.Select size="sm"
-                    value={tempBookingFilters.status}
-                    onChange={(e) => updateBookingFilter("status", e.target.value)}>
-                    <option value="">ALL</option>
-                    <option value="REQUESTED">Requested</option>
-                    <option value="CONFIRMED">Confirmed</option>
-                    <option value="RECONFIRMED">ReConfirmed</option>
-                    <option value="SOLD_OUT">Sold Out</option>
-                    <option value="CANCELLED">Cancelled</option>
-                  </Form.Select>
-                </Col>
-
-                {/* Row 5 — supplier / service type */}
-                <Col md={4}>
-                  <Supplier
-                    value={tempBookingFilters.supplierId}
-                    onChange={(id) => updateBookingFilter("supplierId", String(id))}
-                  />
-                </Col>
-                <Col md={4}>
-                  <Form.Select size="sm"
-                    value={tempBookingFilters.bookingType}
-                    onChange={(e) => updateBookingFilter("bookingType", e.target.value)}>
-                    <option value="">All Services</option>
-                    <option value="NORMAL">Normal</option>
-                    <option value="LAST_MINUTE">Last Minute</option>
-                  </Form.Select>
-                </Col>
-                <Col md={4} />
               </Row>
 
               <h6 className="fw-bold text-primary mb-3">Contract Details</h6>
               <Row className="align-items-end g-4">
-                <Col md={3}>
+                <Col {...filterCol}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
                     <Form.Control
@@ -477,7 +485,7 @@ export default function Contractrate() {
                   </Form.Group>
                 </Col>
 
-                <Col md={3}>
+                <Col {...filterCol}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
                     <Form.Control
@@ -491,8 +499,7 @@ export default function Contractrate() {
                   </Form.Group>
                 </Col>
 
-                <Col md={3}
->
+                <Col {...filterCol}>
                   <MarketType
                     value={filters.marketType}
                     onChange={(value) =>
@@ -501,7 +508,7 @@ export default function Contractrate() {
                   />
                 </Col>
 
-                <Col md={3}>
+                <Col {...filterCol}>
                   <HotelFilter
                     value={filters.hotelId}
                     onChange={(value) =>
@@ -511,13 +518,24 @@ export default function Contractrate() {
                 </Col>
               </Row>
 
-              <Row className="mt-3">
-                <Col md={3}>
+              {/* One line: "search here" box on the left;
+                  Search / Reset / Mail / Print / PDF / Excel on the right */}
+              <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="search here"
+                  className="form-control form-control-sm"
+                  style={{ width: "200px" }}
+                />
+
+                <div className="d-flex gap-2 flex-wrap">
                   <Button
                     variant="success"
-                    className="w-100"
                     size="sm"
-                    style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}
+                    style={{ backgroundColor: "#676767", borderColor: "#676767", minWidth: "100px" }}
+                    onClick={handleSearch}
                     disabled={searchLoading}
                   >
                     {searchLoading ? (
@@ -531,28 +549,29 @@ export default function Contractrate() {
                       </>
                     )}
                   </Button>
-                </Col>
-                <Col md={3}>
                   <Button
                     variant="outline-secondary"
-                    className="w-100"
                     size="sm"
+                    style={{ minWidth: "100px" }}
                     onClick={handleReset}
                     disabled={searchLoading}
                   >
                     <i className="fas fa-undo me-1"></i>Reset
                   </Button>
-                </Col>
-              </Row>
-
-              {/* Action Buttons */}
-              <Row className="mt-4">
-                <Col md={12} className="d-flex gap-2 justify-content-end">
+                  <Button variant="outline-primary" size="sm" onClick={openMailModal}>
+                    <i className="fas fa-envelope me-1"></i>Mail
+                  </Button>
                   <Button variant="outline-secondary" size="sm" onClick={handlePrint}>
                     <i className="fas fa-print me-1"></i>Print
                   </Button>
-                </Col>
-              </Row>
+                  <Button variant="outline-danger" size="sm" onClick={handlePDF}>
+                    <i className="fas fa-file-pdf me-1"></i>PDF
+                  </Button>
+                  <Button variant="outline-success" size="sm" onClick={handleExcel}>
+                    <i className="fas fa-file-excel me-1"></i>Excel
+                  </Button>
+                </div>
+              </div>
             </div>
 
             {/* Results */}
@@ -614,6 +633,43 @@ export default function Contractrate() {
               )}
             </Card.Body>
           </Card>
+
+          <Modal show={showMailModal} onHide={() => !isSending && setShowMailModal(false)} centered>
+            <Modal.Header closeButton={!isSending}>
+              <Modal.Title>Send Report via Email</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Form onSubmit={(e) => { e.preventDefault(); handleSendEmail(); }}>
+                <Form.Group className="mb-3">
+                  <Form.Label>Email Address<span className="text-danger">*</span></Form.Label>
+                  <Form.Control
+                    type="email"
+                    placeholder="Enter recipient email address"
+                    value={emailAddress}
+                    onChange={(e) => setEmailAddress(e.target.value)}
+                    disabled={isSending}
+                  />
+                </Form.Group>
+              </Form>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" type="button" onClick={() => setShowMailModal(false)} disabled={isSending}>
+                Cancel
+              </Button>
+              <Button variant="success" type="button" onClick={handleSendEmail} disabled={isSending || !emailAddress}>
+                {isSending ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2"></span>
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-paper-plane me-1"></i>Send Email
+                  </>
+                )}
+              </Button>
+            </Modal.Footer>
+          </Modal>
         </main>
       </div>
     </div>

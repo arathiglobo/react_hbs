@@ -39,6 +39,16 @@ import { SUPPLIER_SEARCH_TIMEOUT_MS } from "../config/apiTimeouts";
 import toast from "react-hot-toast";
 import { formatFlexibleDate } from "../utils/dateUtils";
 import { isAdminLogin, isAgentLogin, stripSupplierSuffix, supplierCodeForBlock, supplierDisplayName, withoutSupplierName } from "../utils/supplierDisplay";
+import {
+  isAtharvaV2,
+  fitsSlot as atharvaV2FitsSlot,
+  fitsCombination as atharvaV2FitsCombination,
+  pickConflict as atharvaV2PickConflict,
+  buildRateCheckRequest as buildAtharvaV2RateCheck,
+  fetchRateCheck as fetchAtharvaV2RateCheck,
+  toSelectedRates as atharvaV2SelectedRates,
+  rateCheckFailureMessage as atharvaV2FailureMessage,
+} from "../utils/atharvaV2Rates";
 import AdminSupplierStrip from "../components/AdminSupplierStrip";
 import { streamRoomSearch } from "../utils/roomSearchStream";
 import { cleanRoomName, fullRoomName, roomMatchKey } from "../utils/roomNameMatch";
@@ -440,6 +450,9 @@ const ExternalApiRoomList = () => {
     // HotelSearchCode as the rateKey — GoGlobal's session handle for
     // Booking Valuation / Booking Creation. No page-load recheck.
     GOGLOBAL: 21,
+    // ATHARVA_V2 (Atharva XConnect Hotel Service API) — separate from
+    // ATHARVA (3). Rate check before booking: /api/hotel-booking/rate-check/22.
+    ATHARVA_V2: 22,
     // In-house inventory. Only reachable on this page through a hotel mapped
     // across several suppliers — its rates book via the in-house flow.
     INHOUSE: 1,
@@ -1670,6 +1683,12 @@ const ExternalApiRoomList = () => {
     const canBePicked = (rate) => {
       if (!isMultiRoom) return true;
       if (crossSupplierLockSlot(roomSlotIndex, rate) !== -1) return false;
+      if (isAtharvaV2(selectionApiIdOfRate(rate))) {
+        return (
+          atharvaV2FitsSlot(rate, roomSlotIndex, isMultiRoom) &&
+          atharvaV2FitsCombination(rate, roomSlotIndex, selectedRooms, isMultiRoom)
+        );
+      }
       if (String(selectionApiIdOfRate(rate) || "") !== "3" || !rate?.hKey) return true;
       const otherPick = selectedRooms.find(
         (r, i) => i !== roomSlotIndex && r?.selectedRate,
@@ -1966,6 +1985,16 @@ const ExternalApiRoomList = () => {
             "Atharva multi-room bookings require every room to be selected from the SAME rate group. Please clear the other room's selection first, or pick a rate from the same vendor group.",
           ),
         );
+        return;
+      }
+    }
+
+    // ATHARVA_V2 (apiId=22): every room from the same rate group (hKey) and,
+    // for a fixed group, in a combination the supplier allows.
+    if (isAtharvaV2(currentApiId)) {
+      const conflict = atharvaV2PickConflict(rate, roomIndex, selectedRooms, isMultiRoom);
+      if (conflict) {
+        toast.error(withoutSupplierName(conflict));
         return;
       }
     }
@@ -2331,6 +2360,34 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
               : "Unable to fetch accurate rate. Please try again.",
           );
         }
+      })();
+      return;
+    }
+
+    if (isAtharvaV2(currentApiId)) {
+      // ATHARVA_V2 (apiId 22): ratedetails + pricecheck before the booking
+      // page — the price that will be honoured, the policy, the remarks and
+      // the BookingKey the booking needs. Same confirm modal as the others.
+      setLoadingRate(true);
+      (async () => {
+        const check = await fetchAtharvaV2RateCheck(
+          axiosInstance,
+          buildAtharvaV2RateCheck([rate], payload),
+        );
+        setLoadingRate(false);
+        if (!check?.success) {
+          alert(withoutSupplierName(atharvaV2FailureMessage(check)));
+          return;
+        }
+        setSelectedRate(
+          atharvaV2SelectedRates(
+            [rate],
+            check,
+            [mapRateForPayload(rate, hotel, 1)],
+            payload.hotelCode || hotel.hotelId,
+          ),
+        );
+        setShowBookingModal(true);
       })();
       return;
     }
@@ -2960,6 +3017,45 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
               : "Unable to fetch accurate rate. Please try again.",
           );
         }
+      })();
+      return;
+    }
+
+    if (isAtharvaV2(currentApiId)) {
+      // ATHARVA_V2 (apiId 22) multi-room: one rate check for all rooms (they
+      // share one rate group), then the confirm modal.
+      const picks = selectedRooms.map((sr) => sr?.selectedRate);
+      if (picks.some((r) => !r)) {
+        alert("Please select a rate for each room before continuing.");
+        return;
+      }
+      const conflict = picks
+        .map((r, i) => atharvaV2PickConflict(r, i, selectedRooms, true))
+        .find(Boolean);
+      if (conflict) {
+        alert(withoutSupplierName(conflict));
+        return;
+      }
+      setLoadingRate(true);
+      (async () => {
+        const check = await fetchAtharvaV2RateCheck(
+          axiosInstance,
+          buildAtharvaV2RateCheck(picks, payload),
+        );
+        setLoadingRate(false);
+        if (!check?.success) {
+          alert(withoutSupplierName(atharvaV2FailureMessage(check)));
+          return;
+        }
+        setSelectedRate(
+          atharvaV2SelectedRates(
+            picks,
+            check,
+            picks.map((r, i) => mapRateForPayload(r, hotel, i + 1)),
+            payload.hotelCode || hotel.hotelId,
+          ),
+        );
+        setShowBookingModal(true);
       })();
       return;
     }
@@ -4061,6 +4157,22 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                 }
                                 return rate.roomSrNo === roomSlotIndex + 1;
                               })
+                              // ATHARVA_V2 (apiId=22): each slot shows only its
+                              // own room's rates, and once an earlier room is
+                              // picked, only rates of the same rate group that
+                              // form an allowed combination with it.
+                              .filter(
+                                (rate) =>
+                                  !isAtharvaV2(selectionApiIdOfRate(rate)) ||
+                                  (atharvaV2FitsSlot(rate, roomSlotIndex, isMultiRoom) &&
+                                    atharvaV2FitsCombination(
+                                      rate,
+                                      roomSlotIndex,
+                                      selectedRooms,
+                                      isMultiRoom,
+                                      true,
+                                    )),
+                              )
                               // GoGlobal (apiId=21) per-slot filter — REMOVED
                               // per operator request. Rates from every slot's
                               // fanout search now appear under every accordion,
@@ -5093,6 +5205,34 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
             }, 0);
             return (
               <>
+                {/* ATHARVA_V2 (apiId 22) rate-check banner — price change
+                    and the supplier's remarks, before the operator commits.
+                    atharvaV2 is set only on this supplier's rates. */}
+                {selectedRate?.[0]?.atharvaV2 && (
+                  <div
+                    className={`alert ${
+                      selectedRate[0].atharvaV2PriceChanged
+                        ? "alert-warning"
+                        : "alert-success"
+                    } py-2`}
+                    role="alert"
+                  >
+                    <div className="fw-semibold mb-1">
+                      {selectedRate[0].atharvaV2PriceChanged
+                        ? "Rate re-checked — the price has changed since search. Please review before booking."
+                        : "Rate confirmed — no price change since search."}
+                    </div>
+                    {selectedRate[0].atharvaV2Remarks && (
+                      <div
+                        className="small mt-1"
+                        style={{ whiteSpace: "pre-wrap", maxHeight: 200, overflowY: "auto" }}
+                      >
+                        <span className="fw-semibold">Remarks:</span>{" "}
+                        {withoutSupplierName(stripHtmlTags(selectedRate[0].atharvaV2Remarks))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {/* GoGlobal (apiId 21) valuation banner — surfaces the
                     Booking-Valuation outcome (price change / cancellation
                     deadline / late remarks) before the operator commits.

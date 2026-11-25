@@ -43,6 +43,10 @@ import {
   FaUserAlt, FaPlusCircle, FaCheckCircle, FaSyncAlt, FaTimesCircle,
 } from "react-icons/fa";
 import { orderIdPathSegment } from "../../utils/urlSafety";
+import {
+  CCAVENUE_OUTCOME,
+  confirmCCAvenuePayment,
+} from "../../utils/ccavenuePayment";
 
 // Reverse-geocode browser coordinates to a readable address for the
 // Booking History audit trail. Tries OpenStreetMap Nominatim first
@@ -789,20 +793,15 @@ export default function StudentBookingDetailView() {
     navigate(location.pathname, { replace: true, state: {} });
 
     (async () => {
-      if (ccavenueStatus !== "success") {
-        toast.error("Payment was not completed. Please try again.");
-        return;
-      }
       try {
         setConfirmingBooking(true);
-        const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
+        // Waits out a "verifying" return (bank said paid, CC Avenue's
+        // status API not yet) instead of showing "Payment was not completed".
+        const outcome = await confirmCCAvenuePayment(
+          ccavenueOrderId,
+          ccavenueStatus,
         );
-        if (statusResponse.data?.status !== "SUCCESS") {
-          toast.error(
-            statusResponse.data?.statusMessage ||
-              "Payment was not successful. Please try again.",
-          );
+        if (outcome !== CCAVENUE_OUTCOME.PAID) {
           return;
         }
         const response = await axiosInstance.post(

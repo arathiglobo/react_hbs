@@ -14,4 +14,5 @@ import HotelBookingPage from "./HotelBookingPage";
  */
 export default function HotelBookingPageReligious() {
   return <HotelBookingPage religiousMode />;
+  
 }

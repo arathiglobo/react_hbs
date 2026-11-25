@@ -753,7 +753,7 @@
 .hs-page-heading {
   margin: 0 0 16px;
   animation: hsPageHeadingSlide .26s ease;
-}
+} 
 .hs-page-heading-title {
   font-size: clamp(1.5rem, 1rem + 1.6vw, 2rem) !important;
   font-weight: 700 !important;
@@ -761,7 +761,7 @@
   line-height: 1.12 !important;
   color: #F75E00 !important;
   margin: 0 !important;
-} 
+}
 @keyframes hsPageHeadingSlide {
   from { opacity: 0; transform: translateY(-8px); }
   to   { opacity: 1; transform: translateY(0); }
