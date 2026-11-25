@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Badge, Button, Form, Spinner, Table } from "react-bootstrap";
 import axiosInstance from "../../../components/AxiosInstance";
 import { fmtDateTime, fmtNumber } from "./automapFormat";
+import HotelPhoneFillPanel from "./HotelPhoneFillPanel";
 
 const STEPS = [
   {
@@ -170,6 +171,8 @@ export default function MappingRulesTab({ active }) {
           )}
         </div>
       </div>
+
+      <HotelPhoneFillPanel active={active} />
 
       <div className="ahm-panel p-3">
         <h6 className="fw-bold">How a hotel gets mapped</h6>

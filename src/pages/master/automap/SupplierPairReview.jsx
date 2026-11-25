@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import toast from "react-hot-toast";
 import axiosInstance from "../../../components/AxiosInstance";
 import PagerBar from "./PagerBar";
+import HotelPhoneLine from "./HotelPhoneLine";
 import { confidenceTone, escapeHtml, fmtDistance, fmtNumber, fmtPercent, reasonLabel } from "./automapFormat";
 
 /**
@@ -459,6 +460,7 @@ function PairSide({ side }) {
         <span className="ahm-chip">{side.supplier}</span>
         <span className="ahm-hotel-name">{side.name || <span className="text-muted">(unnamed)</span>}</span>
       </div>
+      <HotelPhoneLine phone={side.phone} note={side.phoneNote} />
       <div className="ahm-hotel-id">
         ID {side.supplierHotelId}
         {[side.city, side.country].filter(Boolean).length ? ` · ${[side.city, side.country].filter(Boolean).join(", ")}` : ""}

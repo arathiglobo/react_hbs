@@ -304,6 +304,17 @@ const toDeadlinePayloadString = (d) => {
 export const isHoldEligible = (bookingData) => {
   const apiId = Number(bookingData?.payload?.apiId);
   if (!HOLD_CAPABLE_API_IDS.has(apiId)) return false;
+  return holdWindowOpen(bookingData);
+};
+
+/**
+ * Is the selected rates' free-cancellation window still open? Today in the
+ * UAE on or before the deadline day (free until 11:59 PM UAE), on a rate that
+ * is not non-refundable. The one hold rule for every supplier, ATHARVA
+ * included: once the window has closed nobody can reconfirm in time, and the
+ * deadline job cancels the hold on its next run.
+ */
+const holdWindowOpen = (bookingData) => {
   if (hasNonRefundableRate(bookingData?.selectedRate)) return false;
   const deadline = deriveDeadlineDate(bookingData?.selectedRate || []);
   if (!deadline) return false;
@@ -333,11 +344,14 @@ export const showsBookingModePicker = (bookingData) =>
 
 /**
  * Offer "Hold Room and Pay Later" in the picker? Only for ATHARVA (its own
- * supplier hold) and hold-capable suppliers, never on a non-refundable rate.
+ * supplier hold) and hold-capable suppliers, and only while the free-
+ * cancellation window is open — never on a non-refundable rate. ATHARVA
+ * used to skip the window check, so a hold could be taken after the deadline
+ * and was auto-cancelled within minutes.
  */
 export const offersHoldOption = (bookingData) =>
   (bookingData?.payload?.apiId === 3 || isHoldEligible(bookingData)) &&
-  !hasNonRefundableRate(bookingData?.selectedRate);
+  holdWindowOpen(bookingData);
 
 // Where to land after a successful booking. Last Minute supplier bookings
 // (payload.lastMinuteBooking, set by LastMinuteBookingPage) are tagged
@@ -937,6 +951,16 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
     ) {
       errors.bookingMode =
         "Hold Room and Pay Later is not available for non-refundable rates. Please choose Book and Pay Now.";
+      hasErrors = true;
+    } else if (
+      bookingConfirmation === "Hold & Book Later" &&
+      !offersHoldOption(bookingData)
+    ) {
+      // Same for a hold picked while the window was open that has since
+      // closed (the page stayed open past the deadline day, or the Atharva
+      // late prebook moved the deadline).
+      errors.bookingMode =
+        "This rate's free-cancellation deadline has passed, so it cannot be held. Please choose Book and Pay Now.";
       hasErrors = true;
     }
 
