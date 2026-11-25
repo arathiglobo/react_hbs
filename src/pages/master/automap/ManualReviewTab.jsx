@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import toast from "react-hot-toast";
 import axiosInstance from "../../../components/AxiosInstance";
 import PagerBar from "./PagerBar";
+import HotelPhoneLine from "./HotelPhoneLine";
 import SupplierPairReview from "./SupplierPairReview";
 import { confidenceTone, fmtDistance, fmtNumber, fmtPercent, reasonLabel } from "./automapFormat";
 
@@ -242,6 +243,7 @@ export default function ManualReviewTab({ suppliers, active, canAct, onChanged, 
             <span className="ahm-review-no">{page * size + gIdx + 1}</span>
             <div className="flex-grow-1">
               <div className="ahm-hotel-name">{group.hotelName}</div>
+              <HotelPhoneLine phone={group.phone} note={group.phoneNote} />
               <div className="ahm-hotel-id">
                 ID {group.hotelId} · {[group.city, group.country].filter(Boolean).join(", ") || "—"}
                 {group.masterHotelId ? ` · master #${group.masterHotelId}` : ""}
@@ -277,6 +279,7 @@ export default function ManualReviewTab({ suppliers, active, canAct, onChanged, 
                   <td className="fw-semibold">{c.supplierDisplayName || displayName(c.supplier)}</td>
                   <td>
                     <div>{c.supplierHotelName || <span className="text-muted">(unnamed)</span>}</div>
+                    <HotelPhoneLine phone={c.phone} note={c.phoneNote} />
                     <div className="ahm-hotel-id">ID {c.supplierHotelId}</div>
                   </td>
                   <td className="small">{[c.city, c.country].filter(Boolean).join(", ") || "—"}</td>

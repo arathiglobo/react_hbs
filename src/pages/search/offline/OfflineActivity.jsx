@@ -424,7 +424,7 @@ const OfflineActivity = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancel
 
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Tax (%)</Form.Label>
+              <Form.Label className="form-label-modern">Additional Markup (%)</Form.Label>
               <Form.Control
                 type="number"
                 min="0"
@@ -433,7 +433,7 @@ const OfflineActivity = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancel
                 name="tax"
                 value={form.tax}
                 onChange={handleTaxChange}
-                placeholder="Tax"
+                placeholder="Additional Markup"
               />
             </Form.Group>
           </Col>
@@ -453,7 +453,7 @@ const OfflineActivity = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancel
             </Form.Group>
           </Col>
 
-          {/* Children's own price, with the same Tax (%) — only when the
+          {/* Children's own price, with the same Additional Markup (%) — only when the
               activity has children. */}
           {hasChildren && (
             <>

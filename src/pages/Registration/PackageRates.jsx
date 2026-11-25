@@ -29,6 +29,33 @@ import DateTimeApplyPicker, {
   parseLocalDateTime,
 } from "../../components/DateTimeApplyPicker";
 
+// Hotel dropdown in the Hotel Rates table ("Hotels & room types"). The
+// table's other boxes are Bootstrap small controls under the app-wide
+// .form-control / .form-select look (52px tall, 1.5px #e2e8f0 border, 10px
+// radius, #f8fafc fill, 0.875rem text, 0.5rem text inset). react-select
+// doesn't use those classes, so it is given the same look here; that keeps
+// the Hotel and Room Type boxes — and the rows typed in through the "+"
+// popup — the same size with their text lined up.
+const hotelRowSelectStyles = {
+  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+  control: (base, state) => ({
+    ...base,
+    minHeight: 52,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: state.isFocused ? "#F75E00" : "#e2e8f0",
+    boxShadow: state.isFocused ? "0 0 0 .2rem rgba(247, 94, 0, .14)" : "none",
+    backgroundColor: state.isDisabled ? "var(--bs-secondary-bg, #e9ecef)" : "#f8fafc",
+    fontSize: "0.875rem",
+    fontWeight: 400,
+    "&:hover": { borderColor: state.isFocused ? "#F75E00" : "#e2e8f0" },
+  }),
+  valueContainer: (base) => ({ ...base, padding: "0 0.5rem" }),
+  singleValue: (base) => ({ ...base, marginLeft: 0, marginRight: 0, color: "#1e293b" }),
+  placeholder: (base) => ({ ...base, marginLeft: 0, marginRight: 0 }),
+  input: (base) => ({ ...base, margin: 0 }),
+};
+
 const PackageRates = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -95,6 +122,18 @@ const PackageRates = () => {
   // The country `places` was last requested for.
   const placesCountryRef = useRef(null);
   const hotelDebounceRef = useRef(null);
+
+  // "+" at the end of the ROOM TYPE column in Hotel Rates: a popup where a
+  // hotel name and room type are typed in (free text, not from the hotel
+  // master); Add puts both into that table as one row. Such a row has no
+  // hotelId/roomTypeId and is saved with its hotelName/roomTypeName. The
+  // row's Edit button opens the same popup to change it.
+  // quickAdd is the { categoryId, occupancyId, rowIndex } it was opened for
+  // (rowIndex null = adding a new row; quickAdd null = closed).
+  const [quickAdd, setQuickAdd] = useState(null);
+  const [quickAddHotelName, setQuickAddHotelName] = useState("");
+  const [quickAddRoomTypeName, setQuickAddRoomTypeName] = useState("");
+  const [quickAddErrors, setQuickAddErrors] = useState({});
 
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
   const [isCountryLoading, setIsCountryLoading] = useState(false);
@@ -1324,6 +1363,17 @@ const PackageRates = () => {
     hotelId: null,
     roomTypeId: null,
   });
+  // A row typed in through the "+" popup: no hotel-master id, the hotel name
+  // and room type kept as free text (shown as text boxes in the table).
+  const isTypedHotelRow = (row) => !!row && !row.hotelId && typeof row.hotelName === "string";
+  // Typed rows sit on top; the usual (optional) Hotel / Room Type dropdown
+  // row always follows them, so one blank dropdown row is added when none is
+  // left below the typed ones.
+  const withDropdownRow = (rows) => {
+    const typedRows = rows.filter(isTypedHotelRow);
+    const dropdownRows = rows.filter((r) => !isTypedHotelRow(r));
+    return [...typedRows, ...(dropdownRows.length ? dropdownRows : [emptyHotelRow()])];
+  };
   // One shared rate applies to every hotel/room listed in the Hotel Rates
   // table for a given category + occupancy — the client asked for a single
   // Per Adult / Per Child (with bed) / Per Child (without bed) rate instead
@@ -1414,8 +1464,9 @@ const PackageRates = () => {
       const filtered = rows.filter((_, i) => i !== rowIndex);
       next.rates[categoryId].occupancyRates[occupancyId] = {
         ...next.rates[categoryId].occupancyRates[occupancyId],
-        // Keep at least one empty row so the section always renders scaffold.
-        hotelRows: filtered.length ? filtered : [emptyHotelRow()],
+        // Keep at least one empty row so the section always renders scaffold
+        // (and a dropdown row below any rows typed in through the "+" popup).
+        hotelRows: withDropdownRow(filtered),
       };
       return next;
     });
@@ -1454,6 +1505,83 @@ const PackageRates = () => {
     });
   };
 
+  // ── Add Hotel & Room Type popup (see quickAdd state) ──
+  const sameText = (a, b) =>
+    String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+
+  const resetQuickAdd = () => {
+    setQuickAddHotelName("");
+    setQuickAddRoomTypeName("");
+    setQuickAddErrors({});
+  };
+
+  // rowIndex given = Edit on that typed row: the popup opens filled with it.
+  const openQuickAdd = (categoryId, occupancyId, rowIndex = null) => {
+    resetQuickAdd();
+    if (rowIndex != null) {
+      const row = formData.rates?.[categoryId]?.occupancyRates?.[occupancyId]?.hotelRows?.[rowIndex];
+      setQuickAddHotelName(row?.hotelName || "");
+      setQuickAddRoomTypeName(row?.roomTypeName || "");
+    }
+    setQuickAdd({ categoryId, occupancyId, rowIndex });
+  };
+
+  const closeQuickAdd = () => {
+    setQuickAdd(null);
+    resetQuickAdd();
+  };
+
+  const handleQuickAddSave = () => {
+    if (!quickAdd) return;
+    const { categoryId, occupancyId, rowIndex } = quickAdd;
+    const isEdit = rowIndex != null;
+    const hotelName = quickAddHotelName.trim();
+    const roomTypeName = quickAddRoomTypeName.trim();
+    const errs = {};
+    if (!hotelName) errs.hotel = "Hotel Name is required";
+    if (!roomTypeName) errs.roomType = "Room Type is required";
+    if (Object.keys(errs).length) {
+      setQuickAddErrors(errs);
+      return;
+    }
+    const currentRows = formData.rates?.[categoryId]?.occupancyRates?.[occupancyId]?.hotelRows || [];
+    const alreadyListed = currentRows.some(
+      (r, i) =>
+        i !== rowIndex &&
+        isTypedHotelRow(r) &&
+        sameText(r.hotelName, hotelName) &&
+        sameText(r.roomTypeName, roomTypeName)
+    );
+    if (alreadyListed) {
+      setQuickAddErrors({ roomType: "This hotel and room type is already in the list" });
+      return;
+    }
+    setFormData((prev) => {
+      const next = { ...prev, rates: { ...prev.rates } };
+      ensureRatesPath(next, categoryId, occupancyId);
+      const rows = next.rates[categoryId].occupancyRates[occupancyId].hotelRows;
+      if (isEdit) {
+        // Edit keeps the row where it is and only changes its names.
+        const edited = [...rows];
+        edited[rowIndex] = { ...edited[rowIndex], hotelName, roomTypeName };
+        next.rates[categoryId].occupancyRates[occupancyId] = {
+          ...next.rates[categoryId].occupancyRates[occupancyId],
+          hotelRows: edited,
+        };
+        return next;
+      }
+      // The new typed row goes under the earlier typed rows; the dropdown
+      // rows (at least one blank) stay below them.
+      const typedRow = { ...emptyHotelRow(), hotelName, roomTypeName };
+      next.rates[categoryId].occupancyRates[occupancyId] = {
+        ...next.rates[categoryId].occupancyRates[occupancyId],
+        hotelRows: withDropdownRow([...rows.filter(isTypedHotelRow), typedRow, ...rows.filter((r) => !isTypedHotelRow(r))]),
+      };
+      return next;
+    });
+    closeQuickAdd();
+  };
+
   const updateHotelCommonRate = (categoryId, occupancyId, field, value) => {
     setFormData((prev) => {
       const next = { ...prev, rates: { ...prev.rates } };
@@ -1486,17 +1614,34 @@ const PackageRates = () => {
   // Serialise one hotel row into one backend `hotels[]` entry — mealPlan
   // is null on hotel-base rows. Every row shares the same commonRate (one
   // Adult/Child rate set applies to all hotels/rooms in the section).
-  // Empty rows (no hotel selected) collapse.
+  // Empty rows (no hotel selected) collapse. A row typed in through the "+"
+  // popup has no hotelId; it is sent with its hotelName/roomTypeName instead
+  // (dropped when the hotel name was cleared).
   const hotelRowToPayload = (row, commonRate) => {
-    if (!row || !row.hotelId) return null;
+    if (!row) return null;
     const rate = commonRate || {};
-    return {
-      hotelId: row.hotelId || null,
-      roomTypeId: row.roomTypeId || null,
-      mealPlan: null,
+    const rates = {
       adultRate: rate.adultRate === "" || rate.adultRate == null ? null : Number(rate.adultRate),
       childRate: rate.childWithBed === "" || rate.childWithBed == null ? null : Number(rate.childWithBed),
       childRateWithoutbed: rate.childWithoutBed === "" || rate.childWithoutBed == null ? null : Number(rate.childWithoutBed),
+    };
+    if (row.hotelId) {
+      return {
+        hotelId: row.hotelId || null,
+        roomTypeId: row.roomTypeId || null,
+        mealPlan: null,
+        ...rates,
+      };
+    }
+    const hotelName = isTypedHotelRow(row) ? row.hotelName.trim() : "";
+    if (!hotelName) return null;
+    return {
+      hotelId: null,
+      roomTypeId: null,
+      hotelName,
+      roomTypeName: String(row.roomTypeName || "").trim() || null,
+      mealPlan: null,
+      ...rates,
     };
   };
 
@@ -1529,19 +1674,25 @@ const PackageRates = () => {
 
   // Group the backend's flat hotels[] back into the two-section UI.
   // Rows with hotelId → hotelRows[]; rows with mealPlan-only → mealPlanRates.
+  // Rows with neither but a typed hotelName (the "+" popup) → hotelRows[] too.
   const splitHotelsIntoOccupancyState = (hotels) => {
     const state = emptyOccupancyRates();
     if (!Array.isArray(hotels) || hotels.length === 0) return state;
     const hotelRowsMap = new Map();
     let commonRateSet = false;
     hotels.forEach((h) => {
-      if (h.hotelId != null) {
-        const key = `${h.hotelId}|${h.roomTypeId || ""}`;
+      const isTyped = h.hotelId == null && !h.mealPlan && !!h.hotelName;
+      if (h.hotelId != null || isTyped) {
+        const key = isTyped
+          ? `typed|${h.hotelName}|${h.roomTypeName || ""}`
+          : `${h.hotelId}|${h.roomTypeId || ""}`;
         if (!hotelRowsMap.has(key)) {
-          hotelRowsMap.set(key, {
-            hotelId: h.hotelId,
-            roomTypeId: h.roomTypeId || null,
-          });
+          hotelRowsMap.set(
+            key,
+            isTyped
+              ? { ...emptyHotelRow(), hotelName: h.hotelName, roomTypeName: h.roomTypeName || "" }
+              : { hotelId: h.hotelId, roomTypeId: h.roomTypeId || null }
+          );
         }
         // All hotel rows share one rate — take it from the first row seen.
         if (!commonRateSet) {
@@ -1564,7 +1715,8 @@ const PackageRates = () => {
         }
       }
     });
-    if (hotelRowsMap.size > 0) state.hotelRows = Array.from(hotelRowsMap.values());
+    // Typed rows first, then the dropdown rows (a blank one when none).
+    if (hotelRowsMap.size > 0) state.hotelRows = withDropdownRow(Array.from(hotelRowsMap.values()));
     return state;
   };
 
@@ -2373,12 +2525,82 @@ const PackageRates = () => {
                                               <tr className="bg-light">
                                                 <th style={{ minWidth: "220px" }}>Hotel</th>
                                                 <th style={{ minWidth: "180px" }}>Room Type</th>
-                                                <th style={{ width: "48px" }}></th>
+                                                <th style={{ width: "48px" }}>
+                                                  {/* "+" at the end of Room Type — type a hotel name and room type in a popup */}
+                                                  {!viewMode && (
+                                                    <Button
+                                                      variant="primary"
+                                                      type="button"
+                                                      className="p-0 mx-auto d-flex align-items-center justify-content-center"
+                                                      style={{ width: "20px", height: "20px", fontSize: "12px", borderRadius: "4px" }}
+                                                      title="Add Hotel & Room Type"
+                                                      aria-label="Add Hotel & Room Type"
+                                                      onClick={() => openQuickAdd(categoryKey, occ.id)}
+                                                    >
+                                                      +
+                                                    </Button>
+                                                  )}
+                                                </th>
                                               </tr>
                                             </thead>
                                             <tbody>
                                               {hotelRows.map((row, rowIdx) => {
                                                 const rooms = row.hotelId ? (roomTypesByHotel[row.hotelId] || []) : [];
+                                                // Typed in through the "+" popup: plain (read-only) text
+                                                // boxes instead of the hotel / room type lists; Edit
+                                                // reopens the popup to change them.
+                                                if (isTypedHotelRow(row)) {
+                                                  return (
+                                                    <tr key={rowIdx}>
+                                                      <td>
+                                                        <Form.Control
+                                                          size="sm"
+                                                          type="text"
+                                                          value={row.hotelName}
+                                                          readOnly
+                                                          placeholder="Hotel Name"
+                                                          disabled={viewMode}
+                                                        />
+                                                      </td>
+                                                      <td>
+                                                        <Form.Control
+                                                          size="sm"
+                                                          type="text"
+                                                          value={row.roomTypeName || ""}
+                                                          readOnly
+                                                          placeholder="Room Type"
+                                                          disabled={viewMode}
+                                                        />
+                                                      </td>
+                                                      <td className="text-end">
+                                                        {/* Always removable: removing the last row leaves a
+                                                            blank hotel-list row in its place. */}
+                                                        {!viewMode && (
+                                                          <div className="d-flex justify-content-end gap-2">
+                                                            <Button
+                                                              size="sm"
+                                                              variant="outline-primary"
+                                                              title="Edit"
+                                                              aria-label="Edit"
+                                                              onClick={() => openQuickAdd(categoryKey, occ.id, rowIdx)}
+                                                            >
+                                                              <FaEdit />
+                                                            </Button>
+                                                            <Button
+                                                              size="sm"
+                                                              variant="outline-danger"
+                                                              title="Delete"
+                                                              aria-label="Delete"
+                                                              onClick={() => removeHotelRow(categoryKey, occ.id, rowIdx)}
+                                                            >
+                                                              <FaTrash />
+                                                            </Button>
+                                                          </div>
+                                                        )}
+                                                      </td>
+                                                    </tr>
+                                                  );
+                                                }
                                                 return (
                                                   <tr key={rowIdx}>
                                                     <td>
@@ -2405,7 +2627,7 @@ const PackageRates = () => {
                                                         placeholder="Select hotel..."
                                                         isDisabled={viewMode}
                                                         menuPortalTarget={document.body}
-                                                        styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
+                                                        styles={hotelRowSelectStyles}
                                                       />
                                                     </td>
                                                     <td>
@@ -2633,6 +2855,92 @@ const PackageRates = () => {
                   </Button>
                 </>
               )}
+            </Modal.Footer>
+          </Modal>
+
+          {/* Add Hotel & Room Type popup — opened by the "+" at the end of the
+              ROOM TYPE column in Hotel Rates. Both are typed in (free text).
+              It opens on top of the package rate modal, so it sits above it
+              (zIndex) and dims it with its own translucent background
+              instead of a second backdrop. */}
+          <Modal
+            show={!!quickAdd}
+            onHide={closeQuickAdd}
+            centered
+            backdrop={false}
+            style={{ zIndex: 1070, backgroundColor: "rgba(0, 0, 0, 0.4)" }}
+          >
+            <Modal.Header closeButton>
+              <Modal.Title>
+                {quickAdd?.rowIndex != null ? "Edit" : "Add"} Hotel &amp; Room Type
+              </Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleQuickAddSave();
+                }}
+              >
+                <Form.Group className="mb-3">
+                  <Form.Label>
+                    Hotel Name <span className="text-danger">*</span>
+                  </Form.Label>
+                  <Form.Control
+                    type="text"
+                    autoFocus
+                    maxLength={255}
+                    value={quickAddHotelName}
+                    onChange={(e) => {
+                      setQuickAddHotelName(e.target.value);
+                      setQuickAddErrors({});
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleQuickAddSave();
+                      }
+                    }}
+                    placeholder="Enter hotel name"
+                    isInvalid={!!quickAddErrors.hotel}
+                  />
+                  <Form.Control.Feedback type="invalid">{quickAddErrors.hotel}</Form.Control.Feedback>
+                </Form.Group>
+                <Form.Group>
+                  <Form.Label>
+                    Room Type <span className="text-danger">*</span>
+                  </Form.Label>
+                  <Form.Control
+                    type="text"
+                    maxLength={255}
+                    value={quickAddRoomTypeName}
+                    onChange={(e) => {
+                      setQuickAddRoomTypeName(e.target.value);
+                      setQuickAddErrors({});
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleQuickAddSave();
+                      }
+                    }}
+                    placeholder="Enter room type"
+                    isInvalid={!!quickAddErrors.roomType}
+                  />
+                  <Form.Control.Feedback type="invalid">{quickAddErrors.roomType}</Form.Control.Feedback>
+                  <Form.Text className="text-muted">
+                    For a hotel that isn't in the hotel list. It is saved with this package rate only.
+                  </Form.Text>
+                </Form.Group>
+              </Form>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={closeQuickAdd}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleQuickAddSave}>
+                {quickAdd?.rowIndex != null ? "Update" : "Add"}
+              </Button>
             </Modal.Footer>
           </Modal>
 

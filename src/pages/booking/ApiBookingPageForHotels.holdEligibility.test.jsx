@@ -125,4 +125,19 @@ describe("Book and Pay Now picker on the supplier booking page", () => {
     expect(showsBookingModePicker(nonRefundable)).toBe(true);
     expect(offersHoldOption(nonRefundable)).toBe(false);
   });
+
+  // GLBAT33 (25 Nov 2026): an Atharva hold was taken the day after its
+  // deadline and the deadline job cancelled it 29 seconds later.
+  test.each([
+    ["yesterday", -1],
+    ["two days ago", -2],
+  ])("Atharva offers no hold once its deadline was %s, only Book and Pay Now", (_when, days) => {
+    const data = booking(3, [refundableRate(days)]);
+    expect(showsBookingModePicker(data)).toBe(true);
+    expect(offersHoldOption(data)).toBe(false);
+  });
+
+  test.each(SUPPLIERS)("%s offers no hold once the free window has passed", (_name, apiId) => {
+    expect(offersHoldOption(booking(apiId, [refundableRate(-2)]))).toBe(false);
+  });
 });

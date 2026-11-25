@@ -223,7 +223,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
     if (!form.checkIn) e.checkIn = "Check In is required";
     if (!form.checkOut) e.checkOut = "Check Out is required";
     if (!form.bookingCode.trim()) e.bookingCode = "Booking Code is required";
-    if (!form.tax.trim()) e.tax = "Tax is required";
+    if (!form.tax.trim()) e.tax = "Additional Markup is required";
     return e;
   };
 
@@ -452,10 +452,10 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
             </Form.Group>
           </Col>
 
-          {/* Tax */}
+          {/* Additional Markup (%) — saved as the line's tax % */}
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Tax (%) <span className="text-danger">*</span></Form.Label>
+              <Form.Label className="form-label-modern">Additional Markup (%) <span className="text-danger">*</span></Form.Label>
               <Form.Control
                 type="number"
                 min="0"
@@ -464,7 +464,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdi
                 name="tax"
                 value={form.tax}
                 onChange={handleTaxChange}
-                placeholder="Tax"
+                placeholder="Additional Markup"
               />
               {errors.tax && <div className="text-danger small mt-1">{errors.tax}</div>}
             </Form.Group>

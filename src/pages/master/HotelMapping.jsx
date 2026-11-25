@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Card,
@@ -9,8 +9,10 @@ import {
   Spinner,
   Row,
   Col,
+  Modal,
 } from "react-bootstrap";
 import toast from "react-hot-toast";
+import Swal from "sweetalert2";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
@@ -52,6 +54,118 @@ const HotelMapping = () => {
   });
   const autoMeta = statusMeta(autoStatus.status?.status || (autoStatus.error ? "ERROR" : "IDLE"));
   const autoRunning = autoStatus.status?.status === "RUNNING";
+
+  // On/off switch beside the pill, driven by status.autoSwitch:
+  //  - it follows the daily pause schedule on its own: Off ("Paused") inside
+  //    the window, back On when the window ends — no clicks needed;
+  //  - clicking it is the manual switch (POST /api/hotel-mapping/auto/switch);
+  //    Off stays off, whatever the schedule, until switched on again;
+  //  - the clock button sets the daily window (POST .../switch/schedule).
+  // Off or paused stops the background hotel mapping and the supplier-to-
+  // supplier matching after the hotel in hand; manual mapping on this page
+  // is not affected. configEnabled false = hotel.auto-mapping.enabled=false on
+  // the server, which this page cannot override. pendingSwitch shows a manual
+  // change at once, until the next status poll reports it.
+  const autoSwitch = autoStatus.status?.autoSwitch || null;
+  const [switchBusy, setSwitchBusy] = useState(false);
+  const [pendingSwitch, setPendingSwitch] = useState(null);
+  const reportedManualOn = autoSwitch ? autoSwitch.on !== false : null;
+  useEffect(() => {
+    if (pendingSwitch !== null && reportedManualOn === pendingSwitch) setPendingSwitch(null);
+  }, [pendingSwitch, reportedManualOn]);
+  const autoConfigEnabled = autoSwitch ? autoSwitch.configEnabled !== false : autoStatus.status?.enabled !== false;
+  const manualOn = pendingSwitch ?? reportedManualOn;
+  const scheduledPause = !!autoSwitch?.scheduledPause && manualOn !== false;
+  // What the switch shows: running now (on, enabled, outside the window).
+  const autoSwitchOn = autoSwitch ? !!manualOn && autoConfigEnabled && !scheduledPause : null;
+  const zoneLabel = (zone) => (!zone || zone === "Asia/Dubai" ? "UAE time" : `${zone} time`);
+  const scheduleText = autoSwitch?.scheduleEnabled && autoSwitch.pauseFrom && autoSwitch.pauseTo
+    ? `${autoSwitch.pauseFrom}–${autoSwitch.pauseTo}`
+    : null;
+  const switchTitle = !autoConfigEnabled
+    ? "Automated mapping is turned off in the server settings (hotel.auto-mapping.enabled=false)."
+    : scheduledPause
+    ? `Paused by the daily schedule until ${autoSwitch.pauseTo} (${zoneLabel(autoSwitch.scheduleZone)}). ` +
+      "It switches back on automatically."
+    : autoSwitch?.updatedBy
+    ? `Last switched ${manualOn ? "on" : "off"} by ${autoSwitch.updatedBy}` +
+      (autoSwitch.updatedAt ? ` on ${new Date(autoSwitch.updatedAt).toLocaleString()}` : "")
+    : "Switch automated mapping on or off";
+
+  // Daily pause schedule popup.
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({ enabled: false, pauseFrom: "", pauseTo: "" });
+  const [scheduleError, setScheduleError] = useState("");
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const openSchedule = () => {
+    setScheduleForm({
+      enabled: !!autoSwitch?.scheduleEnabled,
+      pauseFrom: autoSwitch?.pauseFrom || "",
+      pauseTo: autoSwitch?.pauseTo || "",
+    });
+    setScheduleError("");
+    setShowSchedule(true);
+  };
+  const saveSchedule = async () => {
+    const { enabled, pauseFrom, pauseTo } = scheduleForm;
+    if (enabled && (!pauseFrom || !pauseTo)) {
+      setScheduleError("Choose both Pause from and Resume at.");
+      return;
+    }
+    if (enabled && pauseFrom === pauseTo) {
+      setScheduleError("Pause from and Resume at must be different times.");
+      return;
+    }
+    setScheduleSaving(true);
+    try {
+      await axiosInstance.post("/api/hotel-mapping/auto/switch/schedule", {
+        enabled,
+        pauseFrom: pauseFrom || null,
+        pauseTo: pauseTo || null,
+      });
+      toast.success(
+        enabled
+          ? `Automated mapping will pause every day from ${pauseFrom} to ${pauseTo}.`
+          : "Daily pause schedule switched off.",
+      );
+      setShowSchedule(false);
+      autoStatus.refresh();
+    } catch (err) {
+      setScheduleError(err?.response?.data?.error || "The schedule could not be saved. Please try again.");
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
+
+  const toggleAutoMapping = async (e) => {
+    const turnOn = e.target.checked;
+    const result = await Swal.fire({
+      title: turnOn ? "Switch on automated mapping?" : "Switch off automated mapping?",
+      text: turnOn
+        ? `Background mapping starts again within about ${autoStatus.status?.config?.pollIntervalSeconds || 30} seconds` +
+          (scheduleText ? ` (or when the daily pause ${scheduleText} ends).` : ".")
+        : "Background mapping stops after the hotel it is working on and stays off, even outside the daily " +
+          "pause, until you switch it on again. Manual mapping on this page is not affected.",
+      icon: turnOn ? "question" : "warning",
+      showCancelButton: true,
+      confirmButtonText: turnOn ? "Yes, switch on" : "Yes, switch off",
+      cancelButtonText: "Cancel",
+    });
+    if (!result.isConfirmed) return;
+    setSwitchBusy(true);
+    try {
+      await axiosInstance.post("/api/hotel-mapping/auto/switch", { on: turnOn });
+      setPendingSwitch(turnOn);
+      toast.success(turnOn ? "Automated mapping switched on." : "Automated mapping switched off.");
+      autoStatus.refresh();
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.error || "The automated mapping switch could not be changed. Please try again.",
+      );
+    } finally {
+      setSwitchBusy(false);
+    }
+  };
   // Deliberately no "noopener": a tab opened by window.open inherits a clone
   // of this tab's sessionStorage, i.e. the per-tab auth session
   // (utils/authSession.js), so the new tab is already logged in. This is
@@ -350,9 +464,36 @@ const HotelMapping = () => {
             <BackButton fallback="/adminDashboard" />
             <h3 className="mb-0">Hotel Mapping</h3>
             {isAdminUser && (
+              <div className="ms-auto d-flex align-items-center gap-2 flex-wrap">
+              {/* On/off switch for automated mapping (see autoSwitch above): follows
+                  the daily pause schedule on its own; the clock sets the schedule. */}
+              <div className="ahm-pill" title={switchTitle}>
+                <Form.Check
+                  type="switch"
+                  id="automated-mapping-switch"
+                  className="mb-0"
+                  label={autoSwitchOn === null ? "…" : autoSwitchOn ? "On" : scheduledPause ? "Paused" : "Off"}
+                  checked={!!autoSwitchOn}
+                  disabled={autoSwitchOn === null || switchBusy || !autoConfigEnabled || scheduledPause}
+                  onChange={toggleAutoMapping}
+                  aria-label="Switch automated mapping on or off"
+                />
+                {switchBusy && <Spinner animation="border" size="sm" role="presentation" />}
+                <button
+                  type="button"
+                  className="btn btn-link p-0 text-decoration-none text-muted small d-inline-flex align-items-center gap-1"
+                  onClick={openSchedule}
+                  disabled={!autoSwitch}
+                  title="Daily pause schedule"
+                  aria-label="Daily pause schedule"
+                >
+                  <i className="fas fa-clock" aria-hidden="true"></i>
+                  {scheduleText && <span className="fw-normal">{scheduleText}</span>}
+                </button>
+              </div>
               <button
                 type="button"
-                className="ahm-pill ms-auto"
+                className="ahm-pill"
                 onClick={openAutomatedMapping}
                 title="Open the Automated Hotel Mapping screen in a new tab"
               >
@@ -367,6 +508,7 @@ const HotelMapping = () => {
                 )}
                 <i className="fas fa-external-link-alt text-muted small" aria-hidden="true"></i>
               </button>
+              </div>
             )}
           </span>
           <p className="text-muted">
@@ -802,6 +944,73 @@ const HotelMapping = () => {
             </>
           )}
 
+          {/* Daily pause schedule for automated mapping (clock button beside the switch). */}
+          <Modal show={showSchedule} onHide={() => !scheduleSaving && setShowSchedule(false)} centered>
+            <Modal.Header closeButton>
+              <Modal.Title>Automated Mapping Schedule</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Form.Check
+                type="switch"
+                id="automated-mapping-schedule-enabled"
+                className="mb-3"
+                label="Pause automatically every day"
+                checked={scheduleForm.enabled}
+                onChange={(e) => {
+                  setScheduleForm((prev) => ({ ...prev, enabled: e.target.checked }));
+                  setScheduleError("");
+                }}
+              />
+              <Row className="g-3">
+                <Col xs={6}>
+                  <Form.Group controlId="automated-mapping-pause-from">
+                    <Form.Label className="fw-semibold small">
+                      Pause from {scheduleForm.enabled && <span className="text-danger">*</span>}
+                    </Form.Label>
+                    <Form.Control
+                      type="time"
+                      value={scheduleForm.pauseFrom}
+                      disabled={!scheduleForm.enabled}
+                      onChange={(e) => {
+                        setScheduleForm((prev) => ({ ...prev, pauseFrom: e.target.value }));
+                        setScheduleError("");
+                      }}
+                    />
+                  </Form.Group>
+                </Col>
+                <Col xs={6}>
+                  <Form.Group controlId="automated-mapping-pause-to">
+                    <Form.Label className="fw-semibold small">
+                      Resume at {scheduleForm.enabled && <span className="text-danger">*</span>}
+                    </Form.Label>
+                    <Form.Control
+                      type="time"
+                      value={scheduleForm.pauseTo}
+                      disabled={!scheduleForm.enabled}
+                      onChange={(e) => {
+                        setScheduleForm((prev) => ({ ...prev, pauseTo: e.target.value }));
+                        setScheduleError("");
+                      }}
+                    />
+                  </Form.Group>
+                </Col>
+              </Row>
+              {scheduleError && <div className="text-danger small mt-2">{scheduleError}</div>}
+              <Form.Text className="text-muted d-block mt-3">
+                Times are {zoneLabel(autoSwitch?.scheduleZone)}. Between these times automated mapping switches
+                to Off (Paused) on its own, and it switches back On when the time ends. The window can run past
+                midnight, for example 22:00 to 06:00.
+              </Form.Text>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={() => setShowSchedule(false)} disabled={scheduleSaving}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={saveSchedule} disabled={scheduleSaving}>
+                {scheduleSaving ? "Saving..." : "Save"}
+              </Button>
+            </Modal.Footer>
+          </Modal>
         </main>
       </div>
     </div>

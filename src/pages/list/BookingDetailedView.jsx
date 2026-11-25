@@ -1889,10 +1889,24 @@ export default function BookingDetailedView() {
                             AED 1.08, Markup Adjusted 5%). Same admin-only
                             rule as the rows above; the backend also strips
                             these figures for agent logins.
-                              • Invoice Amount — the selling total the invoice
-                                bills (markupBreakdown.invoiceAmount, else
-                                totalRate; VAT is carved out of it, not added
-                                on top). A cancelled booking may be invoiced
+                              • Invoice Amount — the Supplier Payable Rate with
+                                the markup below applied, so it follows the
+                                markup whatever its value (200.00 + 3% =
+                                206.00): markupBreakdown.markupAdjustedAmount,
+                                worked out on the backend per room with
+                                AgentMarkupCalculator, the formula every
+                                supplier's pricing uses, and the markup read
+                                from the database each time the page loads.
+                                The Supplier Payable Rate itself is unchanged.
+                                Bookings priced before the markup was applied
+                                (e.g. GLBIN271, saved at cost on 08 Sept 2026)
+                                were billed their stored totalRate; the invoice
+                                PDF, credit and ledger keep that figure. Falls
+                                back to the stored selling total
+                                (markupBreakdown.invoiceAmount, else totalRate)
+                                when there is no supplier payable to apply the
+                                markup to, or the backend did not send the
+                                breakdown. A cancelled booking may be invoiced
                                 less, so the row says "before cancellation".
                               • Markup Adjusted — the booking agent's markup
                                 setting (markupBreakdown.markupType / Value):
@@ -1904,9 +1918,15 @@ export default function BookingDetailedView() {
                         {(isAdmin || isSuperAdmin) &&
                           (() => {
                             const mb = booking.markupBreakdown || null;
-                            const invoiceAmt = Number(
-                              mb?.invoiceAmount ?? booking.totalRate,
+                            const adjustedAmt = Number(
+                              mb?.markupAdjustedAmount,
                             );
+                            const invoiceAmt =
+                              mb?.markupAdjustedAmount != null &&
+                              Number.isFinite(adjustedAmt) &&
+                              adjustedAmt > 0
+                                ? adjustedAmt
+                                : Number(mb?.invoiceAmount ?? booking.totalRate);
                             const hasInvoice =
                               Number.isFinite(invoiceAmt) && invoiceAmt > 0;
                             const markupValue = Number(mb?.markupValue);

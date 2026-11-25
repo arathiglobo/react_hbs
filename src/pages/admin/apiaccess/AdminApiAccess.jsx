@@ -139,6 +139,18 @@ const CREDENTIAL_SCHEMAS = {
     { key: "platform", label: "Platform ID (guide §11.6 — 7 for API)", type: "text" },
   ],
 
+  // CC Avenue payment gateway (card payments) — MARS → Settings → API Keys.
+  // Keys map to CCAvenueCredentialResolver on the backend (same DB-first,
+  // per-field properties fallback as the suppliers above). The working key
+  // is masked like every other "key" field; the access code is sent to the
+  // customer's browser on every payment anyway, so it is a plain field.
+  // Gateway / status URLs, currency and language stay in the properties.
+  CCAVENUE: [
+    { key: "merchantId", label: "Merchant ID (ccavenue.api.merchant-id)", type: "text" },
+    { key: "accessCode", label: "Access Code (ccavenue.api.access-code)", type: "text" },
+    { key: "workingKey", label: "Working Key (ccavenue.api.working-key)", type: "password" },
+  ],
+
   // INHOUSE reads from the app's own DB — no external credentials to set.
   INHOUSE: [],
 };

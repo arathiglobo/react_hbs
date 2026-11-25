@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, Form, Row, Col, Button, Spinner } from "react-bootstrap";
 import Select from "react-select";
@@ -264,6 +264,11 @@ const OfflineSearch = () => {
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
   const [isLoadingCurrencies, setIsLoadingCurrencies] = useState(false);
+  // "Booking Done On Behalf Of Agent Staff" (optional), as on the hotel
+  // search page: the sub-users of the booking's agent. Empty until an agent
+  // is known; the dropdown is hidden while the agent has no sub-users.
+  const [agentStaffOptions, setAgentStaffOptions] = useState([]);
+  const [selectedAgentStaff, setSelectedAgentStaff] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [commonOrderNote, setCommonOrderNote] = useState("");
   // Submit makes the booking On Request; staff must confirm it before this
@@ -381,14 +386,59 @@ const OfflineSearch = () => {
   }, []);
 
   // ─────────────────────────────────────────────
+  // API: Fetch the agent's staff (sub-users)
+  // ─────────────────────────────────────────────
+  // Admin / staff: the sub-users of the agent picked in Search Agent.
+  // Agent logins (no picker): their own sub-users — /my-sub-users is scoped
+  // to the logged-in agent by the backend. A change of agent drops the
+  // picked staff, since staff belong to one agent.
+  const pickedAgentId = formData.agentId?.value || null;
+  useEffect(() => {
+    setSelectedAgentStaff(null);
+    if (!isAgentRole && !pickedAgentId) {
+      setAgentStaffOptions([]);
+      return;
+    }
+    let cancelled = false;
+    const url = isAgentRole
+      ? "/api/sub-user/my-sub-users"
+      : `/api/sub-user/by-agent/${pickedAgentId}`;
+    axiosInstance
+      .get(url)
+      .then((res) => {
+        if (!cancelled) setAgentStaffOptions(Array.isArray(res?.data) ? res.data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setAgentStaffOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAgentRole, pickedAgentId]);
+
+  // react-select options, built once per fetched list (same labels as the
+  // hotel search page).
+  const agentStaffSelectOptions = useMemo(
+    () =>
+      agentStaffOptions.map((s) => ({
+        value: s.id,
+        label:
+          s.agentName ||
+          [s.firstName, s.lastName].filter(Boolean).join(" ").trim() ||
+          `Sub-user #${s.id}`,
+      })),
+    [agentStaffOptions],
+  );
+
+  // ─────────────────────────────────────────────
   // Validation & Helpers
   // ─────────────────────────────────────────────
   const validateForm = () => {
     const newErrors = {};
     if (!isAgentRole && !formData.agentId) newErrors.agentId = "Agent is required";
-    if (!formData.refNo.trim()) newErrors.refNo = "REF No is required";
+    if (!formData.refNo.trim()) newErrors.refNo = "Agent Reference No is required";
     if (!formData.customerName.trim()) newErrors.customerName = "Passenger Name is required";
-    if (!formData.contactNo.trim()) newErrors.contactNo = "Contact No is required";
+    // Passenger Contact No is optional (sent as "" when left blank).
     if (!formData.bookingDoneBy) newErrors.bookingDoneBy = "Booking Done By is required";
     if (!formData.currency) newErrors.currency = "Currency is required";
     return newErrors;
@@ -449,6 +499,10 @@ const OfflineSearch = () => {
       contactNo: formData.contactNo,
       employeeId: formData.bookingDoneBy?.value || "1",
       currency: formData.currency?.label?.split(" - ")[0] || "AED",
+      // Booking Done On Behalf Of Agent Staff — the picked sub-user's id, or
+      // null when none was picked. The backend checks it belongs to the
+      // booking's agent and stores its name.
+      agentStaffId: selectedAgentStaff?.value ?? null,
     };
 
     try {
@@ -752,17 +806,17 @@ const OfflineSearch = () => {
                     </Col>
                     )}
 
-                    {/* REF NO */}
+                    {/* Agent Reference No (saved as refNo) */}
                     <Col lg={3}>
                       <Form.Group>
-                        <Form.Label className="form-label-modern">REF NO <span className="text-danger">*</span></Form.Label>
+                        <Form.Label className="form-label-modern">Agent Reference No <span className="text-danger">*</span></Form.Label>
                         <Form.Control
                           type="text"
                           className={`form-control-premium ${errors.refNo ? "is-invalid" : ""}`}
                           name="refNo"
                           value={formData.refNo}
                           onChange={handleInputChange}
-                          placeholder="REF NO"
+                          placeholder="Agent Reference No"
                         />
                         {errors.refNo && <div className="text-danger small mt-1">{errors.refNo}</div>}
                       </Form.Group>
@@ -832,19 +886,18 @@ const OfflineSearch = () => {
                     </Form.Group>
                   </Col>
 
-                  {/* Contact No */}
+                  {/* Passenger Contact No (optional) */}
                   <Col lg={3} md={6}>
                     <Form.Group>
-                      <Form.Label className="form-label-modern">Contact No <span className="text-danger">*</span></Form.Label>
+                      <Form.Label className="form-label-modern">Passenger Contact No</Form.Label>
                       <Form.Control
                         type="text"
-                        className={`form-control-premium ${errors.contactNo ? "is-invalid" : ""}`}
+                        className="form-control-premium"
                         name="contactNo"
                         value={formData.contactNo}
                         onChange={handleInputChange}
-                        placeholder="Contact Number"
+                        placeholder="Passenger Contact Number"
                       />
-                      {errors.contactNo && <div className="text-danger small mt-1">{errors.contactNo}</div>}
                     </Form.Group>
                   </Col>
 
@@ -887,6 +940,32 @@ const OfflineSearch = () => {
                       {errors.currency && <div className="text-danger small mt-1">{errors.currency}</div>}
                     </Form.Group>
                   </Col>
+
+                  {/* Booking Done On Behalf Of Agent Staff (optional) — copied
+                      from the hotel search page, labelled "Contact Person"
+                      here. Hidden while the agent has no sub-users. */}
+                  {agentStaffOptions.length > 0 && (
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label className="form-label-modern">
+                          Contact Person{" "}
+                          <span className="text-muted small">(Optional)</span>
+                        </Form.Label>
+                        <Select
+                          className="react-select-premium"
+                          classNamePrefix="react-select"
+                          options={agentStaffSelectOptions}
+                          value={selectedAgentStaff}
+                          onChange={(opt) => setSelectedAgentStaff(opt)}
+                          placeholder="Select agent staff"
+                          isSearchable
+                          isClearable
+                          menuPortalTarget={document.body}
+                          styles={portalSelectStyles}
+                        />
+                      </Form.Group>
+                    </Col>
+                  )}
                 </Row>
 
                 <div className="d-flex justify-content-center pt-0">
@@ -957,8 +1036,8 @@ const OfflineSearch = () => {
                             <th>Description</th>
                             <th>Qty</th>
                             <th>Unit Price</th>
-                            <th>Tax (%)</th>
-                            <th>Tax Amount</th>
+                            <th>Additional Markup (%)</th>
+                            <th>Additional Markup Amount</th>
                             <th>Selling Price</th>
                             <th>Sub Total</th>
                             <th>Action</th>
