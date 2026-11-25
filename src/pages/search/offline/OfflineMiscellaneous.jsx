@@ -236,7 +236,7 @@ const OfflineMiscellaneous = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onC
 
           <Col lg={4} md={6}>
             <Form.Group>
-              <Form.Label className="form-label-modern">Tax (%)</Form.Label>
+              <Form.Label className="form-label-modern">Additional Markup (%)</Form.Label>
               <Form.Control
                 type="number"
                 min="0"
@@ -245,7 +245,7 @@ const OfflineMiscellaneous = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onC
                 name="tax"
                 value={form.tax}
                 onChange={handleTaxChange}
-                placeholder="Tax"
+                placeholder="Additional Markup"
               />
             </Form.Group>
           </Col>

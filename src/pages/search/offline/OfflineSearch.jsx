@@ -386,9 +386,9 @@ const OfflineSearch = () => {
   const validateForm = () => {
     const newErrors = {};
     if (!isAgentRole && !formData.agentId) newErrors.agentId = "Agent is required";
-    if (!formData.refNo.trim()) newErrors.refNo = "REF No is required";
+    if (!formData.refNo.trim()) newErrors.refNo = "Agent Reference No is required";
     if (!formData.customerName.trim()) newErrors.customerName = "Passenger Name is required";
-    if (!formData.contactNo.trim()) newErrors.contactNo = "Contact No is required";
+    // Passenger Contact No is optional (sent as "" when left blank).
     if (!formData.bookingDoneBy) newErrors.bookingDoneBy = "Booking Done By is required";
     if (!formData.currency) newErrors.currency = "Currency is required";
     return newErrors;
@@ -752,17 +752,17 @@ const OfflineSearch = () => {
                     </Col>
                     )}
 
-                    {/* REF NO */}
+                    {/* Agent Reference No (saved as refNo) */}
                     <Col lg={3}>
                       <Form.Group>
-                        <Form.Label className="form-label-modern">REF NO <span className="text-danger">*</span></Form.Label>
+                        <Form.Label className="form-label-modern">Agent Reference No <span className="text-danger">*</span></Form.Label>
                         <Form.Control
                           type="text"
                           className={`form-control-premium ${errors.refNo ? "is-invalid" : ""}`}
                           name="refNo"
                           value={formData.refNo}
                           onChange={handleInputChange}
-                          placeholder="REF NO"
+                          placeholder="Agent Reference No"
                         />
                         {errors.refNo && <div className="text-danger small mt-1">{errors.refNo}</div>}
                       </Form.Group>
@@ -832,19 +832,18 @@ const OfflineSearch = () => {
                     </Form.Group>
                   </Col>
 
-                  {/* Contact No */}
+                  {/* Passenger Contact No (optional) */}
                   <Col lg={3} md={6}>
                     <Form.Group>
-                      <Form.Label className="form-label-modern">Contact No <span className="text-danger">*</span></Form.Label>
+                      <Form.Label className="form-label-modern">Passenger Contact No</Form.Label>
                       <Form.Control
                         type="text"
-                        className={`form-control-premium ${errors.contactNo ? "is-invalid" : ""}`}
+                        className="form-control-premium"
                         name="contactNo"
                         value={formData.contactNo}
                         onChange={handleInputChange}
-                        placeholder="Contact Number"
+                        placeholder="Passenger Contact Number"
                       />
-                      {errors.contactNo && <div className="text-danger small mt-1">{errors.contactNo}</div>}
                     </Form.Group>
                   </Col>
 
@@ -957,8 +956,8 @@ const OfflineSearch = () => {
                             <th>Description</th>
                             <th>Qty</th>
                             <th>Unit Price</th>
-                            <th>Tax (%)</th>
-                            <th>Tax Amount</th>
+                            <th>Additional Markup (%)</th>
+                            <th>Additional Markup Amount</th>
                             <th>Selling Price</th>
                             <th>Sub Total</th>
                             <th>Action</th>
