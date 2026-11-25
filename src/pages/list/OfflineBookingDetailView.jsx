@@ -1186,6 +1186,9 @@ export default function OfflineBookingDetailView() {
                           value={booking.agentName || booking.agentFullName || "Direct Client"}
                         />
                         <InfoRow label="Booked By Employee" value={booking.bookingDoneBy} />
+                        {/* Picked in the Offline page's "Booking Done On Behalf
+                            Of Agent Staff" dropdown; "-" when none was picked. */}
+                        <InfoRow label="Booked On Behalf Of Agent Staff" value={booking.agentStaffName} />
                         <InfoRow label="Booked By (Login)" value={booking.bookedBy || booking.bookerName} />
                         <InfoRow label="Agent Reference" value={booking.refNo} />
                         <InfoRow label="Confirmation No." value={booking.confirmationNo} />
