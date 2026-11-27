@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 
 // Shared react-select styling — matches the searchable dropdowns on /register.
 const selectStyles = (hasError) => ({
+  
   control: (base, state) => ({
     ...base,
     minHeight: 44,
