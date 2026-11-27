@@ -314,6 +314,8 @@ import CabBookingNotesPage from "./pages/list/CabBookingNotesPage";
 import SchefferDriverBookingNotesPage from "./pages/list/SchefferDriverBookingNotesPage";
 import DayStayBookingNotesPage from "./pages/list/DayStayBookingNotesPage";
 import HotelBookingHistory from "./pages/report/HotelBookingHistory";
+import SupplierSearchLogs from "./pages/report/SupplierSearchLogs";
+import SupplierSearchLogFile from "./pages/report/SupplierSearchLogFile";
 
 // Super Admin — API access control (external clients + per-endpoint permissions)
 import ApiEndpointCatalog from "./pages/superadmin/apiaccess/ApiEndpointCatalog";
@@ -522,6 +524,9 @@ export default function App() {
         <Route path="/report/online-daily-sales" element={<PrivateRoute roles={["admin","agent"]}><OnlineDailySalesReport /></PrivateRoute>} />
         <Route path="/report/time-limit-daily-sales" element={<PrivateRoute roles={["admin","agent"]}><TimeLimitOnlineDailySalesReport /></PrivateRoute>} />
         <Route path="/report/hotel-booking-history" element={<PrivateRoute roles={["admin"]}><HotelBookingHistory /></PrivateRoute>} />
+        <Route path="/report/supplier-search-logs" element={<PrivateRoute roles={["admin"]}><SupplierSearchLogs /></PrivateRoute>} />
+        {/* One provider's file of a search, opened in a new tab from the list above. */}
+        <Route path="/report/supplier-search-logs/file" element={<PrivateRoute roles={["admin"]}><SupplierSearchLogFile /></PrivateRoute>} />
 
         {/* Super Admin — API access control for external clients. Restricted
             to super_admin so an ADMIN login can neither see the menu (Sidebar)

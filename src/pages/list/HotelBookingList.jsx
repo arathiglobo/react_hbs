@@ -343,11 +343,29 @@ const HotelBookingList = ({
   // religious rows of each page gave wrong totals and empty pages (1 entry
   // spread over 5 page buttons). Loading the whole bucket and paging the
   // religious rows in the browser makes the count, "Showing X to Y of Z" and
-  // the page buttons come from religious rows alone. The regular hotel and
-  // 24-hour lists (religiousOnly false) are unaffected.
+  // the page buttons come from religious rows alone.
+  //
+  // The regular Hotel Bookings list is in this mode too, for the same reason:
+  // it hides religious rows (they have their own list) and the API cannot
+  // leave them out, so a server page of 10 showed fewer rows, "of N entries"
+  // counted only that page and the page buttons counted every booking
+  // ("1 to 9 of 9" next to 26 pages). 24-hour rows are left out by the
+  // server (is24HourCheckin=false). Only the 24-Hour list, which the server
+  // filters exactly, still pages on the server.
   const isClientFiltering =
     religiousOnly ||
+    !force24HourOnly ||
     Boolean((search || "").trim() || (checkInDateFilter || "").trim());
+  // Page state each fetch depends on — null while the browser pages the rows,
+  // so a page click there doesn't re-download the whole Booking Type.
+  const upcomingPaging = isClientFiltering ? null : pagination.upcoming;
+  const completedPaging = isClientFiltering ? null : pagination.completed;
+  const cancelledPaging = isClientFiltering ? null : pagination.cancelled;
+  const onrequestPaging = isClientFiltering ? null : pagination.onrequest;
+  const reconfirmedPaging = isClientFiltering ? null : pagination.reconfirmed;
+  const confirmedPaging = isClientFiltering ? null : pagination.confirmed;
+  const invoicedPaging = isClientFiltering ? null : pagination.invoiced;
+  const allPaging = isClientFiltering ? null : pagination.all;
   const statusOptions = useMemo(
     () => [
       { value: "all", label: "All" },
@@ -473,12 +491,12 @@ const HotelBookingList = ({
             cancelledSize: SEARCH_ALL_PAGE_SIZE,
           }
         : {
-            upcomingPage: pagination.upcoming.page - 1,
-            upcomingSize: pagination.upcoming.perPage,
-            completedPage: pagination.completed.page - 1,
-            completedSize: pagination.completed.perPage,
-            cancelledPage: pagination.cancelled.page - 1,
-            cancelledSize: pagination.cancelled.perPage,
+            upcomingPage: upcomingPaging.page - 1,
+            upcomingSize: upcomingPaging.perPage,
+            completedPage: completedPaging.page - 1,
+            completedSize: completedPaging.perPage,
+            cancelledPage: cancelledPaging.page - 1,
+            cancelledSize: cancelledPaging.perPage,
           };
 
       if (selectedMonth) params.month = selectedMonth;
@@ -486,6 +504,7 @@ const HotelBookingList = ({
       // 24-hour list page: filter at the source so pagination + totals
       // reflect 24-hour bookings only (backend ignores the param when omitted).
       if (force24HourOnly) params.is24HourCheckin = true;
+      else if (!religiousOnly) params.is24HourCheckin = false; // regular list
 
       // Role-based filtering
       if (role === "agent" && userId) {
@@ -523,7 +542,7 @@ const HotelBookingList = ({
     } finally {
       setLoading(false);
     }
-  }, [pagination, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly]);
+  }, [upcomingPaging, completedPaging, cancelledPaging, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly, religiousOnly]);
 
   // Fetch On Request bookings from dedicated endpoint
   const fetchOnRequestBookings = useCallback(async () => {
@@ -538,8 +557,8 @@ const HotelBookingList = ({
       const params = isClientFiltering
         ? { page: 0, size: SEARCH_ALL_PAGE_SIZE }
         : {
-            page: pagination.onrequest.page - 1,
-            size: pagination.onrequest.perPage,
+            page: onrequestPaging.page - 1,
+            size: onrequestPaging.perPage,
           };
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
@@ -547,6 +566,7 @@ const HotelBookingList = ({
       else if (role === "staff" && userId) params.staffId = userId;
       // 24-hour list page: server-side filter so pagination/totals are correct.
       if (force24HourOnly) params.is24HourCheckin = true;
+      else if (!religiousOnly) params.is24HourCheckin = false; // regular list
       const response = await axiosInstance.get(
         "/api/bookings/list/on-request",
         { params },
@@ -566,7 +586,7 @@ const HotelBookingList = ({
     } finally {
       setLoading(false);
     }
-  }, [pagination.onrequest, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly]);
+  }, [onrequestPaging, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly, religiousOnly]);
 
   // Fetch Reconfirmed bookings from dedicated endpoint
   const fetchReconfirmedBookings = useCallback(async () => {
@@ -581,8 +601,8 @@ const HotelBookingList = ({
       const params = isClientFiltering
         ? { page: 0, size: SEARCH_ALL_PAGE_SIZE }
         : {
-            page: pagination.reconfirmed.page - 1,
-            size: pagination.reconfirmed.perPage,
+            page: reconfirmedPaging.page - 1,
+            size: reconfirmedPaging.perPage,
           };
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
@@ -590,6 +610,7 @@ const HotelBookingList = ({
       else if (role === "staff" && userId) params.staffId = userId;
       // 24-hour list page: server-side filter so pagination/totals are correct.
       if (force24HourOnly) params.is24HourCheckin = true;
+      else if (!religiousOnly) params.is24HourCheckin = false; // regular list
       const response = await axiosInstance.get(
         "/api/bookings/list/reconfirmed",
         { params },
@@ -609,7 +630,7 @@ const HotelBookingList = ({
     } finally {
       setLoading(false);
     }
-  }, [pagination.reconfirmed, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly]);
+  }, [reconfirmedPaging, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly, religiousOnly]);
 
   // Fetch Confirmed bookings (intermediate "Confirmed" status, not yet
   // Reconfirmed). Mirrors the on-request / reconfirmed pattern so the new
@@ -626,14 +647,15 @@ const HotelBookingList = ({
       const params = isClientFiltering
         ? { page: 0, size: SEARCH_ALL_PAGE_SIZE }
         : {
-            page: pagination.confirmed.page - 1,
-            size: pagination.confirmed.perPage,
+            page: confirmedPaging.page - 1,
+            size: confirmedPaging.perPage,
           };
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
       if (role === "agent" && userId) params.agentId = userId;
       else if (role === "staff" && userId) params.staffId = userId;
       if (force24HourOnly) params.is24HourCheckin = true;
+      else if (!religiousOnly) params.is24HourCheckin = false; // regular list
       const response = await axiosInstance.get(
         "/api/bookings/list/confirmed",
         { params },
@@ -653,7 +675,7 @@ const HotelBookingList = ({
     } finally {
       setLoading(false);
     }
-  }, [pagination.confirmed, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly]);
+  }, [confirmedPaging, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly, religiousOnly]);
 
   // Fetch Invoiced bookings from dedicated endpoint
   const fetchInvoicedBookings = useCallback(async () => {
@@ -668,8 +690,8 @@ const HotelBookingList = ({
       const params = isClientFiltering
         ? { page: 0, size: SEARCH_ALL_PAGE_SIZE }
         : {
-            page: pagination.invoiced.page - 1,
-            size: pagination.invoiced.perPage,
+            page: invoicedPaging.page - 1,
+            size: invoicedPaging.perPage,
           };
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
@@ -677,6 +699,7 @@ const HotelBookingList = ({
       else if (role === "staff" && userId) params.staffId = userId;
       // 24-hour list page: server-side filter so pagination/totals are correct.
       if (force24HourOnly) params.is24HourCheckin = true;
+      else if (!religiousOnly) params.is24HourCheckin = false; // regular list
       const response = await axiosInstance.get("/api/bookings/list/invoiced", {
         params,
       });
@@ -695,7 +718,7 @@ const HotelBookingList = ({
     } finally {
       setLoading(false);
     }
-  }, [pagination.invoiced, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly]);
+  }, [invoicedPaging, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly, religiousOnly]);
 
   // Fetch ALL bookings (every status) from dedicated endpoint
   const fetchAllBookings = useCallback(async () => {
@@ -710,8 +733,8 @@ const HotelBookingList = ({
       const params = isClientFiltering
         ? { page: 0, size: SEARCH_ALL_PAGE_SIZE }
         : {
-            page: pagination.all.page - 1,
-            size: pagination.all.perPage,
+            page: allPaging.page - 1,
+            size: allPaging.perPage,
           };
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
@@ -719,6 +742,7 @@ const HotelBookingList = ({
       else if (role === "staff" && userId) params.staffId = userId;
       // 24-hour list page: server-side filter so pagination/totals are correct.
       if (force24HourOnly) params.is24HourCheckin = true;
+      else if (!religiousOnly) params.is24HourCheckin = false; // regular list
       const response = await axiosInstance.get("/api/bookings/list/all", {
         params,
       });
@@ -737,7 +761,7 @@ const HotelBookingList = ({
     } finally {
       setLoading(false);
     }
-  }, [pagination.all, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly]);
+  }, [allPaging, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly, religiousOnly]);
 
   // Fetch booking details
   const fetchBookingDetails = async (bookingId) => {

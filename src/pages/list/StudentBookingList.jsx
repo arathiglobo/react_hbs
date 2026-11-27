@@ -229,6 +229,7 @@ export default function StudentBookingList() {
   const [bookingType, setBookingType] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
+  const [checkInDateFilter, setCheckInDateFilter] = useState("");
 
   const [role, setRole] = useState(
     (sessionStorage.getItem("currentActiveRole") || "").toLowerCase()
@@ -250,14 +251,19 @@ export default function StudentBookingList() {
     }
   }, []);
 
-  // Booking Type, Month / Year and search are applied in the browser. While
+  // Booking Type, Check-in Date, Month / Year and search are applied in the
+  // browser. While
   // any of them is on, ask the API for every booking (one big page) and page
   // the filtered rows here; otherwise the filter would only see the 10 rows
   // of the current server page while the page buttons still counted every
   // booking (e.g. "Jul" → 4 rows but 2 pages, and July bookings on server
   // page 2 missing). With no filter the API pages as before.
   const clientFilterActive =
-    bookingType !== "all" || !!selectedMonth || !!selectedYear || !!search.trim();
+    bookingType !== "all" ||
+    !!checkInDateFilter ||
+    !!selectedMonth ||
+    !!selectedYear ||
+    !!search.trim();
   const serverPage = clientFilterActive ? 0 : page;
   const serverSize = clientFilterActive ? SEARCH_ALL_PAGE_SIZE : size;
 
@@ -368,6 +374,16 @@ export default function StudentBookingList() {
       });
     }
 
+    // Check-in Date picker — exact-day match on the booking's checkInDate
+    // (the picker gives YYYY-MM-DD). Mirrors HotelBookingList / DayStay:
+    // rows without a check-in date are hidden while a date is picked. Works
+    // together with the Time Period (book date) and Booking Type filters.
+    if (checkInDateFilter) {
+      list = list.filter(
+        (b) => String(b.checkInDate || "").slice(0, 10) === checkInDateFilter,
+      );
+    }
+
     if (selectedMonth || selectedYear) {
       list = list.filter((b) => {
         if (!b.bookingDate) return false;
@@ -407,7 +423,7 @@ export default function StudentBookingList() {
     }
 
     return list;
-  }, [rows, bookingType, selectedMonth, selectedYear, search]);
+  }, [rows, bookingType, checkInDateFilter, selectedMonth, selectedYear, search]);
 
   // Filter on: every booking was loaded, so the page count, the rows shown and
   // the "Showing X to Y of Z" line all come from the filtered set. Filter off:
@@ -603,14 +619,18 @@ export default function StudentBookingList() {
               <Col xs={12}>
                 <Card className="shadow-sm border-0 w-100" style={{ borderRadius: "8px" }}>
                   <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Booking Type
-                    </h6>
-                    <Row className="g-2">
+                    {/* Each filter carries its own label inside its column
+                        and the row bottom-aligns, so the Booking Type
+                        select, the Check-in Date picker and Clear sit on
+                        one line (same layout as DayStay / HotelBookingList). */}
+                    <Row className="g-2 align-items-end">
                       <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Booking Type
+                        </h6>
                         <Form.Select
                           value={bookingType}
                           onChange={(e) => {
@@ -627,6 +647,44 @@ export default function StudentBookingList() {
                             </option>
                           ))}
                         </Form.Select>
+                      </Col>
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Check-in Date
+                        </h6>
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={checkInDateFilter}
+                            onChange={(e) => {
+                              setCheckInDateFilter(e.target.value);
+                              setPage(0);
+                            }}
+                            size="sm"
+                            aria-label="Check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px" }}
+                          />
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => {
+                              setCheckInDateFilter("");
+                              setSearch("");
+                              setBookingType("all");
+                              setSelectedMonth("");
+                              setSelectedYear("");
+                              setPage(0);
+                            }}
+                            disabled={!checkInDateFilter && !search && bookingType === "all" && !selectedMonth && !selectedYear}
+                            aria-label="Clear check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px", whiteSpace: "nowrap" }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Card.Body>

@@ -196,6 +196,11 @@ const StatusPill = ({ meta, raw }) => {
   );
 };
 
+// Page size asked of the API while a browser-side filter is on, so the filter
+// runs over every booking instead of one server page — same value the hotel,
+// senior-citizen and student lists use.
+const SEARCH_ALL_PAGE_SIZE = 10000;
+
 const PackageBookingList = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
@@ -228,6 +233,20 @@ const PackageBookingList = () => {
   const [serverTotalElements, setServerTotalElements] = useState(0);
   const [serverTotalPages, setServerTotalPages] = useState(0);
 
+  // Search, Travel Date and the ReConfirmed / Confirmed booking types are
+  // applied in the browser. While any of them is on, ask the API for every
+  // booking (one big page) and page the filtered rows here; otherwise the
+  // filter only sees the 10 rows of the current server page while the footer
+  // still shows the server's totals ("Showing 1 to 10 of 128" with 1 row).
+  // With no such filter the API pages as before.
+  const clientFilterActive =
+    !!search.trim() ||
+    !!travelDateFilter ||
+    status === "reconfirmed" ||
+    status === "confirmed";
+  const serverPage = clientFilterActive ? 0 : page - 1;
+  const serverLimit = clientFilterActive ? SEARCH_ALL_PAGE_SIZE : perPage;
+
   const months = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
@@ -254,8 +273,8 @@ const PackageBookingList = () => {
       setLoading(true);
 
       const params = {
-        page: page - 1,
-        limit: perPage
+        page: serverPage,
+        limit: serverLimit,
       };
 
       // Role-based filtering
@@ -327,7 +346,7 @@ const PackageBookingList = () => {
     } finally {
       setLoading(false);
     }
-  }, [status, page, perPage, role, userId, selectedMonth, selectedYear]);
+  }, [status, serverPage, serverLimit, perPage, role, userId, selectedMonth, selectedYear]);
 
   // Handle role sync if it's missing from localStorage initially
   useEffect(() => {
@@ -411,24 +430,30 @@ const PackageBookingList = () => {
     }
 
     return filtered;
-  }, [allBookings, search, travelDateFilter, role]);
+  }, [allBookings, status, search, travelDateFilter, role]);
 
-  // Paginate filtered bookings. When the backend already paginated (Page
-  // response) skip the local slice — `filteredBookings` is already the
-  // current page; slicing again would empty out pages 2+.
+  // The server's paging (Page response, no browser-side filter on) is used
+  // as-is; otherwise — a plain List response, or every booking loaded for a
+  // browser-side filter — page the filtered rows here.
+  const useServerPaging = serverPaginated && !clientFilterActive;
+
+  // Paginate filtered bookings. With server paging `filteredBookings` is
+  // already the current page; slicing by page again would empty out pages
+  // 2+. The slice to perPage there only guards the moment right after a
+  // filter is cleared, before the reload replaces the full list.
   const paginatedBookings = useMemo(() => {
-    if (serverPaginated) return filteredBookings;
+    if (useServerPaging) return filteredBookings.slice(0, perPage);
     const startIndex = (page - 1) * perPage;
     const endIndex = startIndex + perPage;
     return filteredBookings.slice(startIndex, endIndex);
-  }, [filteredBookings, page, perPage, serverPaginated]);
+  }, [filteredBookings, page, perPage, useServerPaging]);
 
-  // Pagination totals: prefer server values for Page responses, fall back to
-  // the local filtered count for List responses.
-  const totalElements = serverPaginated
+  // Pagination totals: server values with server paging, otherwise the
+  // filtered count.
+  const totalElements = useServerPaging
     ? serverTotalElements
     : filteredBookings.length;
-  const totalPages = serverPaginated
+  const totalPages = useServerPaging
     ? Math.max(1, serverTotalPages)
     : Math.max(1, Math.ceil(filteredBookings.length / perPage));
 
@@ -653,8 +678,26 @@ const PackageBookingList = () => {
                           <Button
                             variant="outline-secondary"
                             size="sm"
-                            onClick={() => setTravelDateFilter("")}
-                            disabled={!travelDateFilter}
+                            // Resets every filter. The list is NOT emptied
+                            // here: leaving the filters reloads it on its own
+                            // (the request's page size / params change), and
+                            // when nothing would change emptying it left the
+                            // table blank with no reload.
+                            onClick={() => {
+                              setTravelDateFilter("");
+                              setSearch("");
+                              setSelectedMonth("");
+                              setSelectedYear("");
+                              setStatus("all");
+                              setPage(1);
+                            }}
+                            disabled={
+                              !travelDateFilter &&
+                              !search &&
+                              !selectedMonth &&
+                              !selectedYear &&
+                              status === "all"
+                            }
                             aria-label="Clear travel date filter"
                             style={{
                               fontSize: "0.85rem",

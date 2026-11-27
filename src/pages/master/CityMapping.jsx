@@ -148,6 +148,45 @@ const CityMapping = () => {
     apiCityId: "",
   });
 
+  // A city can be mapped to several cities of one platform (Kochi to the
+  // platform's Kochi, Cochin and Ernakulam): one row each. These are the rows
+  // the chosen master city already has for the chosen platform.
+  const [existingRows, setExistingRows] = useState([]);
+  const [existingLoading, setExistingLoading] = useState(false);
+
+  const loadExistingRows = async (masterCountryId, masterCityId, platform) => {
+    if (!masterCityId || !platform) {
+      setExistingRows([]);
+      return;
+    }
+    setExistingLoading(true);
+    try {
+      const res = await axiosInstance.get("/api/cityMapping", {
+        params: {
+          apiProvider: apiProviderOf(platform).toLowerCase(),
+          countryId: masterCountryId || undefined,
+          cityId: masterCityId,
+          page: 0,
+          limit: 100,
+        },
+      });
+      const rows = Array.isArray(res?.data) ? res.data : [];
+      setExistingRows(rows.filter((r) => !r.isDeleted));
+    } catch (e) {
+      setExistingRows([]);
+    } finally {
+      setExistingLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadExistingRows(
+      formData.masterCountryId,
+      formData.masterCityId,
+      formData.apiProvider,
+    );
+  }, [formData.masterCountryId, formData.masterCityId, formData.apiProvider]);
+
   // Generic form input handler
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -469,22 +508,24 @@ const CityMapping = () => {
         apiProvider: apiProviderOf(formData.apiProvider),
       });
       setMappings((prev) => [...prev, res.data]);
-      toast.success("Mapping added successfully ✅");
+      toast.success(
+        "Mapping added ✅ — pick another platform city to map this city to more than one",
+      );
 
-      // Reset form
-      setFormData({
-        masterCountryId: "",
-        masterCityId: "",
-        apiProvider: "",
-        apiCountryId: "",
-        apiCityId: "",
-      });
-      setSelectedCountryOption(null);
-      setSelectedCityOption(null);
+      // Only the platform city is cleared: the master city, platform and
+      // platform country stay, so the next platform city of the same city
+      // (Kochi: Kochi, then Cochin, then Ernakulam) can be added straight away.
+      setFormData((prev) => ({ ...prev, apiCityId: "" }));
+      setSelectedPlatformCityOption(null);
+      loadExistingRows(
+        formData.masterCountryId,
+        formData.masterCityId,
+        formData.apiProvider,
+      );
     } catch (err) {
-      // The backend refuses a second mapping for an already-mapped city
-      // (409 with a message naming the city) — show that instead of the
-      // generic text so the user knows to unmap the existing row first.
+      // The backend refuses a platform city of another platform country
+      // than the city's existing rows (409 with a message naming the city)
+      // — show that instead of the generic text.
       toast.error(err?.response?.data?.message || "Failed to save mapping ❌");
       console.error(err);
     }
@@ -751,6 +792,38 @@ const CityMapping = () => {
                       </Button>
                     </Col>
                   </Row>
+
+                  {formData.masterCityId && formData.apiProvider && (
+                    <div className="small">
+                      <span className="text-muted me-2">
+                        Already mapped for {formData.apiProvider}:
+                      </span>
+                      {existingLoading ? (
+                        <Spinner animation="border" size="sm" />
+                      ) : existingRows.length === 0 ? (
+                        <span className="text-muted">none yet</span>
+                      ) : (
+                        existingRows.map((r) => (
+                          <Badge
+                            key={r.id}
+                            bg="light"
+                            text="dark"
+                            className="border me-1 fw-normal"
+                          >
+                            platform city {r.apiCityId}
+                            {r.apiCityCode ? ` (${r.apiCityCode})` : ""} ·
+                            mapping {r.id}
+                          </Badge>
+                        ))
+                      )}
+                      <div className="text-muted mt-1">
+                        A city can be mapped to several cities of one platform
+                        (for example Kochi to Kochi, Cochin and Ernakulam): add
+                        them one at a time. They must all be in the same
+                        platform country.
+                      </div>
+                    </div>
+                  )}
                 </Card.Body>
               </Card>
               {/* Mappings Table */}

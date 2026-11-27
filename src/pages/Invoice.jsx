@@ -697,13 +697,28 @@ export default function Invoice() {
     </Popover>
   );
 
+  // Offline rows carry the offline booking's own id (offline bookings are
+  // numbered in their own table), which the hotel invoice endpoint would read
+  // as a different, hotel booking — INV-GLB-0036 (id 36) opened hotel booking
+  // 36's invoice. They use the offline booking's PDF instead: the same
+  // invoice its detail page (/booking-details/offline-booking/:id) shows.
+  const isOfflineRow = (invoice) =>
+    String(invoice?.bookingType || "").trim().toLowerCase() === "offline";
+
+  const offlineInvoicePdf = (invoice, type) =>
+    axiosInstance.get(`/api/offline_booking/${invoice.bookingId}/pdf`, {
+      params: { type },
+    });
+
   const handleInvoiceVoucherClick = async (invoice) => {
     try {
-      const invoiceId =
-        invoice.bookingId ||
-        invoice.hotelId ||
-        invoice.id ||
-        invoice.bookingCode;
+      const offline = isOfflineRow(invoice);
+      const invoiceId = offline
+        ? invoice.bookingId
+        : invoice.bookingId ||
+          invoice.hotelId ||
+          invoice.id ||
+          invoice.bookingCode;
 
       if (!invoiceId) {
         toast.error("Invoice ID not found");
@@ -711,9 +726,11 @@ export default function Invoice() {
       }
 
       setPdfLoading(true);
-      const response = await axiosInstance.post(
-        `/api/invoice-generation/generate/${invoiceId}?invoiceType=PROFORMA`,
-      );
+      const response = offline
+        ? await offlineInvoicePdf(invoice, "INVOICE")
+        : await axiosInstance.post(
+            `/api/invoice-generation/generate/${invoiceId}?invoiceType=PROFORMA`,
+          );
 
       if (response.data && response.data.status === "SUCCESS") {
         setPdfUrl(response.data.pdfUrl);
@@ -734,11 +751,13 @@ export default function Invoice() {
 
   const handleTaxVoucherClick = async (invoice) => {
     try {
-      const invoiceId =
-        invoice.bookingId ||
-        invoice.hotelId ||
-        invoice.id ||
-        invoice.bookingCode;
+      const offline = isOfflineRow(invoice);
+      const invoiceId = offline
+        ? invoice.bookingId
+        : invoice.bookingId ||
+          invoice.hotelId ||
+          invoice.id ||
+          invoice.bookingCode;
 
       if (!invoiceId) {
         toast.error("Invoice ID not found");
@@ -746,9 +765,11 @@ export default function Invoice() {
       }
 
       setPdfLoading(true);
-      const response = await axiosInstance.post(
-        `/api/invoice-generation/generate/${invoiceId}?invoiceType=TAX`,
-      );
+      const response = offline
+        ? await offlineInvoicePdf(invoice, "TAX")
+        : await axiosInstance.post(
+            `/api/invoice-generation/generate/${invoiceId}?invoiceType=TAX`,
+          );
 
       if (response.data && response.data.status === "SUCCESS") {
         setPdfUrl(response.data.pdfUrl);
