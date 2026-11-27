@@ -1372,6 +1372,11 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
               rate.hotelSearchCode ||
               rate.rateKey ||
               null,
+            // GRN (apiId 20): the search session this room's rate key belongs
+            // to, as the room list / recheck returned it. The booking goes
+            // out on that session, not a newer search of the same hotel.
+            // Null on other suppliers.
+            supplierSessionId: rate.supplierSessionId || null,
             // Darina free-cancellation deadline shown to the customer at
             // rate-selection time (ISO yyyy-MM-dd). BE audits this in
             // DarinaHotelBookingService so we know exactly which cut-off

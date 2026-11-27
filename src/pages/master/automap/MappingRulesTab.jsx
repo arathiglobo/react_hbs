@@ -35,7 +35,7 @@ const STEPS = [
   },
   {
     title: "Use in search",
-    text: "Linked hotels appear once in search at the cheapest rate. The room page then follows the Room Mapping setting above.",
+    text: "While \"Mapped hotels as one hotel in search\" is on, linked hotels appear once in search at the cheapest rate and the room page then follows the Room Mapping setting above. While it is off, each supplier's hotel appears on its own with only its own rooms.",
   },
   {
     title: "Not mapped",

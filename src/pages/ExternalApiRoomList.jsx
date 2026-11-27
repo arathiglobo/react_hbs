@@ -418,6 +418,8 @@ const ExternalApiRoomList = () => {
       ratePayload?.checkInDate,
       ratePayload?.checkOutDate,
       rate?.rateKey,
+      // The GRN session the rate came from: a recheck only counts for it.
+      rate?.supplierSessionId,
     ].join("|");
   };
 
@@ -663,6 +665,10 @@ const ExternalApiRoomList = () => {
       rateKey: rate.rateKey,
       groupCode: rate.tokenId || null,
       roomCode: rate.roomTypeCode || null,
+      // GRN search session the rate key belongs to (from the room list).
+      // Recheck runs on it, not on a newer search of the same hotel; once
+      // it has expired the answer is searchAgain.
+      supplierSessionId: rate.supplierSessionId || null,
     };
     try {
       const resp = await axiosInstance.post(
@@ -921,6 +927,11 @@ const ExternalApiRoomList = () => {
             // keeps showing GRN's free-text notes.
             rateComments: fallbackRateComments,
           });
+        } else if (recheck?.searchAgain) {
+          // Search session expired: the policy can't be verified and the
+          // rate can't be booked — offer the new search instead.
+          setShowPoliciesModal(false);
+          setRateGone({ message: recheck.message });
         } else {
           setPrebookError(recheck?.message || "Recheck failed.");
           console.warn("GRN recheck: no policy returned:", recheck?.message);
@@ -1097,6 +1108,8 @@ const ExternalApiRoomList = () => {
     // rooms[].rateKey.
     if (recheck.rateKey) mapped.atharvaRateKey = recheck.rateKey;
     if (recheck.groupCode) mapped.atharvaTokenId = recheck.groupCode;
+    // The session the recheck ran on — the booking must go out on it.
+    if (recheck.grnSearchId) mapped.supplierSessionId = recheck.grnSearchId;
     mapped.grnPriceChanged = recheck.priceChanged === true;
     mapped.grnPolicyChanged = recheck.policyChanged === true;
     mapped.contractLabel = mapped.contractLabel || "Verified rate (GRN)";
@@ -1950,6 +1963,9 @@ const ExternalApiRoomList = () => {
       // rooms share one key → one common policy) from non-bundled (each
       // room has its own key → its own policy).
       rateKey: rate?.rateKey || null,
+      // GRN: the search session that rate key belongs to (sent back on
+      // booking). Null for other suppliers.
+      supplierSessionId: rate?.supplierSessionId || null,
     };
   };
 
@@ -2498,6 +2514,12 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
           const recheck = await fetchGrnRecheck(rate);
           if (!recheck?.success) {
             setLoadingRate(false);
+            // The search session behind this rate has expired (or the
+            // supplier no longer knows the rate): only a new search helps.
+            if (recheck?.searchAgain) {
+              setRateGone({ message: recheck.message });
+              return;
+            }
             alert(
               recheck?.message ||
                 "This rate is no longer available. Please reselect and try again.",
@@ -2811,6 +2833,13 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
           const failed = results.find((r) => !r?.success);
           if (failed) {
             setLoadingRate(false);
+            // Search session expired (or rate unknown to the supplier) on
+            // any of the rates → the whole selection needs a new search.
+            const expired = results.find((r) => r?.searchAgain);
+            if (expired) {
+              setRateGone({ message: expired.message });
+              return;
+            }
             alert(
               failed.message ||
                 "This rate is no longer available. Please reselect and try again.",
@@ -3689,7 +3718,9 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
 
             {/* RateHawk: the picked rate is no longer available (prebook
                 rejected it). Per RateHawk the user searches again rather
-                than the system looking for the same rate. */}
+                than the system looking for the same rate. GRN: the search
+                session behind the rate has expired (30 minutes) — same
+                answer, search again. */}
             <Modal
               show={!!rateGone}
               onHide={() => setRateGone(null)}

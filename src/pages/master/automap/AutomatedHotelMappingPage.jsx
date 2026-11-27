@@ -14,6 +14,7 @@ import ManualReviewTab from "./ManualReviewTab";
 import NotMappedTab from "./NotMappedTab";
 import CitiesReviewTab from "./CitiesReviewTab";
 import MappingRulesTab from "./MappingRulesTab";
+import SearchMappingSwitch from "./SearchMappingSwitch";
 import useAutoMappingStatus from "./useAutoMappingStatus";
 import { fmtNumber, fmtPercent, statusMeta } from "./automapFormat";
 
@@ -187,6 +188,8 @@ export default function AutomatedHotelMappingPage() {
                 <span className="text-muted">·</span>
                 <span>Manual: {fmtNumber(manualMapped)}</span>
               </div>
+              {/* How hotel search shows mapped hotels: one card, or one card per supplier. */}
+              <SearchMappingSwitch />
               <Tabs activeKey={tab} onSelect={(k) => setTab(k || "status")} className="mb-3" mountOnEnter>
                 <Tab
                   eventKey="status"

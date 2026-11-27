@@ -990,6 +990,13 @@ export function buildSidebarItems({ currentRole, hotelId, dashboardPath }) {
           to: "/report/hotel-booking-history",
           roles: ["admin"],
         },
+        {
+          // One file per supplier for every hotel search: hotels found and the
+          // supplier's raw XML / JSON replies, kept for 2 days.
+          label: "Supplier Search Logs",
+          to: "/report/supplier-search-logs",
+          roles: ["admin"],
+        },
       ],
     },
 
