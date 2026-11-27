@@ -24,16 +24,17 @@ import {
   Form,
   Modal,
   Button,
-  InputGroup,
+  // InputGroup, // only the old PDF dialog used it (commented out)
 } from "react-bootstrap";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { FaEnvelope, FaPaperPlane, FaDownload, FaExclamationCircle } from "react-icons/fa";
+// FaEnvelope, FaPaperPlane, FaDownload: only the old PDF dialog used them (commented out).
+import { FaExclamationCircle } from "react-icons/fa";
 import {
   FaHistory, FaMapMarkerAlt, FaNetworkWired, FaCalendarAlt, FaClock,
-  FaUserAlt, FaPlusCircle, FaCheckCircle, FaTimesCircle,
+  FaUserAlt, FaPlusCircle, FaCheckCircle, FaSyncAlt, FaTimesCircle,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
-import Swal from "sweetalert2";
+// import Swal from "sweetalert2"; // only the old Confirm dialog used it (commented out in handleConfirm)
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -167,12 +168,28 @@ const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmat
 const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
 const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
 const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // Booking History
+const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Add New Item
+const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm (hotel page colour)
+
+// "ADD NEW ITEM" — the hotel booking page's sub-booking types. Each opens its
+// own New Booking page with ?parentBookingCode=<this booking's invoice number>,
+// exactly as the hotel page does with its booking code.
+const ADD_NEW_ITEM_TYPES = [
+  { key: "HOTEL", label: "Hotel Booking", route: "/new-booking/hotel" },
+  { key: "HOTEL_24HR", label: "24 Hour Check-In", route: "/new-booking/hotel-24hr" },
+  { key: "LONG_STAY", label: "Long Stay Booking", route: "/new-booking/long-stay" },
+  { key: "DAY_STAY", label: "Day Stay Check-In", route: "/new-booking/day-stay" },
+  { key: "GOV_EMPLOYEE", label: "Government Employee", route: "/new-booking/gov-employee" },
+  { key: "STUDENT", label: "Student Booking", route: "/new-booking/student" },
+  { key: "SENIOR_CITIZEN", label: "Senior Citizen Booking", route: "/new-booking/senior-citizen" },
+];
 
 // Booking History badges — the hotel page's, for the steps an offline
 // booking can go through.
 const HISTORY_ACTION_META = {
   "Booking Created": { bg: "#e6f4ea", fg: "#1e7e34", icon: FaPlusCircle },
   "Booking Confirmed": { bg: "#e7f1ff", fg: "#1d4ed8", icon: FaCheckCircle },
+  "Booking Reconfirmed": { bg: "#e0f2f1", fg: "#0d9488", icon: FaSyncAlt },
   "Booking Cancelled": { bg: "#fdecea", fg: "#c0392b", icon: FaTimesCircle },
 };
 const HISTORY_ACTION_FALLBACK = { bg: "#f1f5f9", fg: "#475569", icon: FaHistory };
@@ -206,6 +223,9 @@ export default function OfflineBookingDetailView() {
   // Booking History "Location" for Confirm / Cancel, as the hotel page records it.
   const operatorLocation = useOperatorLocation();
   const location = useLocation();
+  // ADD NEW ITEM's booking-type picker (as on the hotel booking page).
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [selectedAddItemType, setSelectedAddItemType] = useState(ADD_NEW_ITEM_TYPES[0].key);
 
   // booking summary (header info). Comes from location.state when the
   // user clicks the eye icon, else fetched from the all-list endpoint
@@ -215,15 +235,29 @@ export default function OfflineBookingDetailView() {
   const [loadingItems, setLoadingItems] = useState(false);
   const [loadingBooking, setLoadingBooking] = useState(!booking);
 
-  // PDF modal state (Voucher / Invoice / Tax)
-  const [showPdfModal, setShowPdfModal] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState("");
-  const [pdfTitle, setPdfTitle] = useState("");
-  const [loadingPdf, setLoadingPdf] = useState(false);
+  // Document buttons — the hotel booking page's flow: the button reads
+  // GENERATING... while the PDF is made, then a preview opens with Open in
+  // new tab, Download and (admins) ✉ Send Email → Send Document Email.
+  const [generatingPdfType, setGeneratingPdfType] = useState(null);
+  const [pdfPreview, setPdfPreview] = useState(null);
+  const [showSendEmailModal, setShowSendEmailModal] = useState(false);
+  const [sendEmailDocType, setSendEmailDocType] = useState("");
+  const [sendEmailDocLabel, setSendEmailDocLabel] = useState("");
+  const [sendEmailRecipient, setSendEmailRecipient] = useState("");
+  const [sendEmailNote, setSendEmailNote] = useState("");
+  const [sendEmailError, setSendEmailError] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
 
-  const [email, setEmail] = useState("");
-  const [emailError, setEmailError] = useState("");
-  const [sendingMail, setSendingMail] = useState(false);
+  // Before: a preview opened at once with an inline email box (it posted to
+  // /api/v1/offline-booking/send-pdf-email, which the server doesn't have).
+  // Kept commented out:
+  // const [showPdfModal, setShowPdfModal] = useState(false);
+  // const [pdfUrl, setPdfUrl] = useState("");
+  // const [pdfTitle, setPdfTitle] = useState("");
+  // const [loadingPdf, setLoadingPdf] = useState(false);
+  // const [email, setEmail] = useState("");
+  // const [emailError, setEmailError] = useState("");
+  // const [sendingMail, setSendingMail] = useState(false);
 
   // On Request → Confirmed (staff, before the cancellation deadline).
   const [confirming, setConfirming] = useState(false);
@@ -236,30 +270,35 @@ export default function OfflineBookingDetailView() {
     String(booking.cancellationDeadline).replace(" ", "T").slice(0, 16) <= uaeNowInputValue();
   const canConfirm = isOnRequest && !deadlinePassed && isStaffOrAdmin();
 
+  // The hotel page's Confirm / Reconfirm Booking dialog: CONFIRM (On Request)
+  // and RECONFIRM both open it; Reject is offered in the Confirm flow only.
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
   const handleConfirm = async () => {
     if (!booking) return;
     // Confirming debits the booking's total from the agent's credit (the
     // server refuses it when the agent hasn't enough), and a cancellation
-    // after that refunds nothing — say so before staff press Yes.
-    const esc = (s) =>
-      String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-    const total = money(totalsView.grandTotal);
-    const agentName = booking.agentName || "the agent";
-    const result = await Swal.fire({
-      title: "Confirm this booking?",
-      html:
-        (booking.cancellationDeadline
-          ? `<div>Cancellation deadline: ${esc(formatUaeDateTime(booking.cancellationDeadline))} (UAE time)</div>`
-          : "") +
-        (Number(totalsView.grandTotal) > 0
-          ? `<div style="margin-top:8px"><b>AED ${esc(total)}</b> will be debited from ${esc(agentName)}'s credit.</div>` +
-            `<div style="margin-top:6px;font-size:0.9em;color:#842029">Cancelled before the cancellation deadline, it is refunded; cancelled after the deadline, it is not.</div>`
-          : ""),
-      icon: "question",
-      showCancelButton: true,
-      confirmButtonText: "Yes, confirm it",
-    });
-    if (!result.isConfirmed) return;
+    // after that refunds nothing — the Confirm Booking dialog says so before
+    // staff press Confirm. Before (a SweetAlert), kept commented out:
+    // const esc = (s) =>
+    //   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    // const total = money(totalsView.grandTotal);
+    // const agentName = booking.agentName || "the agent";
+    // const result = await Swal.fire({
+    //   title: "Confirm this booking?",
+    //   html:
+    //     (booking.cancellationDeadline
+    //       ? `<div>Cancellation deadline: ${esc(formatUaeDateTime(booking.cancellationDeadline))} (UAE time)</div>`
+    //       : "") +
+    //     (Number(totalsView.grandTotal) > 0
+    //       ? `<div style="margin-top:8px"><b>AED ${esc(total)}</b> will be debited from ${esc(agentName)}'s credit.</div>` +
+    //         `<div style="margin-top:6px;font-size:0.9em;color:#842029">Cancelled before the cancellation deadline, it is refunded; cancelled after the deadline, it is not.</div>`
+    //       : ""),
+    //   icon: "question",
+    //   showCancelButton: true,
+    //   confirmButtonText: "Yes, confirm it",
+    // });
+    // if (!result.isConfirmed) return;
     setConfirming(true);
     try {
       const res = await axiosInstance.post(
@@ -268,6 +307,7 @@ export default function OfflineBookingDetailView() {
         { bookingLocation: operatorLocation },
       );
       setBooking((prev) => ({ ...prev, ...res.data }));
+      setShowConfirmModal(false);
       toast.success("Booking confirmed");
       loadDetails(); // refresh every field (status, confirmed by / at)
     } catch (error) {
@@ -427,9 +467,93 @@ export default function OfflineBookingDetailView() {
     ? { ...lineTotals, beforeTax: 0, taxAmount: 0, subTotal: 0, grandTotal: 0 }
     : lineTotals;
 
-  const handlePdfClick = async (type) => {
+  // Document buttons — the hotel page's handleDownloadPdf. type: the server's
+  // PDF type (VOUCHER, PROFORMA_VOUCHER, INVOICE = the Proforma Invoice, TAX =
+  // the final Invoice); label: the preview's heading. The button reads
+  // GENERATING... until the PDF is ready, then the preview opens.
+  const handleDownloadPdf = async (type, label) => {
     if (!booking) return;
-    setPdfTitle(type);
+    try {
+      setGeneratingPdfType(type);
+      const response = await axiosInstance.get(
+        `/api/offline_booking/${booking.supplierMainBasicId}/pdf`,
+        { params: { type: type.toUpperCase() } },
+      );
+      if (response.data && response.data.status === "SUCCESS" && response.data.pdfUrl) {
+        setPdfPreview({ url: response.data.pdfUrl, label: label || type, type: type.toUpperCase() });
+      } else {
+        toast.error(response.data?.message || `Failed to generate ${label || type}.`);
+      }
+    } catch (error) {
+      console.error(`Error generating ${type} PDF:`, error);
+      // e.g. "This booking is On Request. Confirm it first — …" for a voucher.
+      toast.error(error.response?.data?.message || `Error generating ${label || type}.`);
+    } finally {
+      setGeneratingPdfType(null);
+    }
+  };
+
+  // One document button (hotel page style): disabled and reading
+  // GENERATING... while its PDF is being made.
+  const docButton = (type, label, text) => (
+    <button
+      key={type}
+      style={BTN_INFO}
+      disabled={generatingPdfType === type}
+      onClick={() => handleDownloadPdf(type, label)}
+    >
+      {generatingPdfType === type ? "GENERATING..." : text}
+    </button>
+  );
+
+  // ✉ Send Email in the preview → Send Document Email (hotel page): a fresh
+  // PDF of the document is mailed by the server, with the optional note.
+  const openSendEmailModal = (docType, label) => {
+    setSendEmailDocType(docType);
+    setSendEmailDocLabel(label);
+    setSendEmailRecipient("");
+    setSendEmailNote("");
+    setSendEmailError("");
+    setShowSendEmailModal(true);
+  };
+
+  const sendDocumentEmail = async () => {
+    const to = (sendEmailRecipient || "").trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!to) {
+      setSendEmailError("Email is required");
+      return;
+    }
+    if (!emailRegex.test(to)) {
+      setSendEmailError("Enter a valid email address");
+      return;
+    }
+    setSendEmailError("");
+    if (!booking?.supplierMainBasicId) return;
+    try {
+      setSendingEmail(true);
+      const response = await axiosInstance.post(
+        `/api/v1/offline-booking/${booking.supplierMainBasicId}/send-document`,
+        { email: to, docType: sendEmailDocType, note: (sendEmailNote || "").trim() || null },
+      );
+      if (response.data && response.data.success === true) {
+        toast.success(response.data.message || `${sendEmailDocLabel} sent to ${to}`);
+        setShowSendEmailModal(false);
+      } else {
+        toast.error(response.data?.message || "Failed to send document.");
+      }
+    } catch (error) {
+      console.error("Error sending document email:", error);
+      toast.error(error.response?.data?.message || "Failed to send document. Please try again.");
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  /* Before — the old PDF dialog's handlers, kept commented out:
+  const handlePdfClick = async (type, title = type) => {
+    if (!booking) return;
+    setPdfTitle(title);
     setShowPdfModal(true);
     setLoadingPdf(true);
     setPdfUrl("");
@@ -497,6 +621,7 @@ export default function OfflineBookingDetailView() {
     setEmailError("");
     setPdfUrl("");
   };
+  */
 
   // ── Values laid out like the hotel booking details page ──────────────
   // Status as the hotel booking details page shows it: every step the
@@ -517,7 +642,7 @@ export default function OfflineBookingDetailView() {
   const displayStatus = isCancelled
     ? wentOnRequest
       ? wasConfirmed
-        ? "On Request/Confirmed/Cancelled"
+        ? `On Request/Confirmed${booking?.reconfirmedAt ? "/ReConfirmed" : ""}/Cancelled`
         : "On Request/Cancelled"
       : booking?.cancelledAt
       ? "Confirmed/Cancelled"
@@ -525,8 +650,98 @@ export default function OfflineBookingDetailView() {
     : isOnRequest
     ? "On Request"
     : wentOnRequest
-    ? "On Request/Confirmed"
+    ? `On Request/Confirmed${booking?.reconfirmedAt ? "/ReConfirmed" : ""}`
     : "Confirmed";
+  // (Cancelled after a reconfirm reads ".../ReConfirmed/Cancelled" — set above.)
+
+  // ── Reconfirm step (as on the hotel booking) ──
+  // A booking confirmed from 2026-11-27 on is reconfirmed by staff before its
+  // final Voucher / Invoice; until then the page offers RECONFIRM and the
+  // Proforma Voucher / Invoice. The server says so in awaitingReconfirm;
+  // bookings confirmed before the step existed count as final.
+  const isReconfirmed = !!booking?.reconfirmedAt;
+  const awaitingReconfirm = !isOnRequest && !isCancelled && booking?.awaitingReconfirm === true;
+  const canReconfirm = awaitingReconfirm && isStaffOrAdmin();
+  // VOUCHER / INVOICE (final) once confirmed and not waiting for Reconfirm.
+  const showsFinalDocs = !isOnRequest && !isCancelled && !awaitingReconfirm;
+  // Cancelled: the final Invoice when it was final before it was cancelled,
+  // else the Proforma pair (the hotel page's rule). A booking from before the
+  // On Request rule (no deadline) was confirmed from the start.
+  const wasFinalBeforeCancel = wentOnRequest
+    ? wasConfirmed && (isReconfirmed || booking?.reconfirmRequired !== true)
+    : true;
+  const cancelledShowsFinalDocs = isCancelled && wasFinalBeforeCancel;
+
+  // RECONFIRM dialog (hotel page): Reconfirm, or Reject — which cancels the
+  // booking with "Rejected by …" as its reason, under the Cancel rules
+  // (credit refunded before the deadline; after it, staff accept the charge).
+  const [reconfirming, setReconfirming] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectedBy, setRejectedBy] = useState("");
+  const [rejectedByError, setRejectedByError] = useState("");
+  const [rejectionRemarks, setRejectionRemarks] = useState("");
+  const [rejectingBooking, setRejectingBooking] = useState(false);
+
+  const reconfirmBooking = async () => {
+    if (!booking?.supplierMainBasicId) return;
+    setReconfirming(true);
+    try {
+      const res = await axiosInstance.post(
+        `/api/v1/offline-booking/${booking.supplierMainBasicId}/reconfirm`,
+        // Booking History: where it was reconfirmed from (the server adds the IP).
+        { bookingLocation: operatorLocation },
+      );
+      setBooking((prev) => ({ ...prev, ...res.data }));
+      setShowConfirmModal(false);
+      toast.success("Booking reconfirmed");
+      loadDetails(); // refresh every field (status, reconfirmed by / at)
+    } catch (error) {
+      console.error("Error reconfirming offline booking:", error);
+      toast.error(error.response?.data?.message || "Failed to reconfirm booking");
+    } finally {
+      setReconfirming(false);
+    }
+  };
+
+  const openRejectModal = () => {
+    setShowConfirmModal(false);
+    setRejectedBy("");
+    setRejectedByError("");
+    setRejectionRemarks("");
+    setAcceptCancellationCharges(false);
+    setShowRejectModal(true);
+  };
+
+  const rejectBooking = async () => {
+    const rb = rejectedBy.trim();
+    if (!rb) {
+      setRejectedByError("Rejected By is required");
+      return;
+    }
+    setRejectedByError("");
+    if (!booking?.supplierMainBasicId) return;
+    const remarks = rejectionRemarks.trim();
+    setRejectingBooking(true);
+    try {
+      const res = await axiosInstance.post(
+        `/api/v1/offline-booking/${booking.supplierMainBasicId}/cancel`,
+        {
+          reason: `Rejected by ${rb}${remarks ? ` — ${remarks}` : ""}`,
+          bookingLocation: operatorLocation,
+          ...(needsChargeAcknowledgement ? { acceptCancellationCharges } : {}),
+        },
+      );
+      setShowRejectModal(false);
+      setBooking((prev) => ({ ...prev, statusCode: "CANCELLED", bookingStatus: "Cancelled" }));
+      toast.success(res.data?.message || "Booking rejected.");
+      loadDetails();
+    } catch (error) {
+      console.error("Error rejecting offline booking:", error);
+      toast.error(error.response?.data?.message || "Failed to reject booking.");
+    } finally {
+      setRejectingBooking(false);
+    }
+  };
 
   // ── Booking actions copied from the hotel booking details page ────────
   // ADD AGENT REFERENCE, CONFIRMATION NO., RESEND MAIL TO AGENT, BOOKING
@@ -545,6 +760,8 @@ export default function OfflineBookingDetailView() {
   // not while On Request, and not on one cancelled before it was confirmed
   // (the hotel page's "Confirmed or later"). The server checks it again.
   const confirmedForReferences = isCancelled ? !cancelledWithoutConfirming : !isOnRequest;
+  // The document preview's ✉ Send Email is for admins, as on the hotel page.
+  const isAdminRole = String(getCurrentActiveRole() || "").trim().toUpperCase() === "ADMIN";
 
   // Agent Reference — GET/POST /api/v1/offline-booking/{id}/agent-reference
   const [showAgentRefModal, setShowAgentRefModal] = useState(false);
@@ -730,8 +947,9 @@ export default function OfflineBookingDetailView() {
 
   // Resend Mail to Agent — preview + send, as on the hotel page: the Voucher
   // once confirmed or cancelled, the Proforma Voucher while On Request.
-  const resendDocType = isOnRequest ? "PROFORMA_VOUCHER" : "VOUCHER";
-  const resendDocLabel = isOnRequest ? "Offline Booking Proforma Voucher" : "Voucher";
+  // Also the Proforma while confirmed but not yet reconfirmed (hotel rule).
+  const resendDocType = isOnRequest || awaitingReconfirm ? "PROFORMA_VOUCHER" : "VOUCHER";
+  const resendDocLabel = isOnRequest || awaitingReconfirm ? "Offline Booking Proforma Voucher" : "Voucher";
   const [showResendMailModal, setShowResendMailModal] = useState(false);
   const [resendMailPdfUrl, setResendMailPdfUrl] = useState("");
   const [resendMailEmail, setResendMailEmail] = useState("");
@@ -821,6 +1039,16 @@ export default function OfflineBookingDetailView() {
         by: booking.confirmedBy || "-",
         location: booking.confirmedLocation,
         ip: booking.confirmedIp,
+      });
+    }
+    if (booking.reconfirmedAt) {
+      events.push({
+        action: "Booking Reconfirmed",
+        status: "Confirmed/ReConfirmed",
+        at: booking.reconfirmedAt,
+        by: booking.reconfirmedBy || "-",
+        location: booking.reconfirmedLocation,
+        ip: booking.reconfirmedIp,
       });
     }
     if (isCancelled && booking.cancelledAt) {
@@ -1235,6 +1463,16 @@ export default function OfflineBookingDetailView() {
                         />
                         {booking.confirmedBy && (
                           <InfoRow label="Confirmed By" value={booking.confirmedBy} />
+                        )}
+                        {/* Reconfirm step, as on the hotel page. */}
+                        {booking.reconfirmedAt && (
+                          <InfoRow
+                            label="Reconfirmed Date"
+                            value={`${formatUaeDateTime(booking.reconfirmedAt)} (UAE)`}
+                          />
+                        )}
+                        {booking.reconfirmedBy && (
+                          <InfoRow label="Reconfirmed By" value={booking.reconfirmedBy} />
                         )}
                         {statusCode === "CANCELLED" && booking.cancelledAt && (
                           <InfoRow
@@ -1732,6 +1970,20 @@ export default function OfflineBookingDetailView() {
                     flexWrap: "wrap",
                   }}
                 >
+                  {/* Add New Item — first, as on the hotel booking page; not on
+                      a cancelled booking. */}
+                  {!isCancelled && (
+                    <button
+                      style={BTN_PRIMARY}
+                      onClick={() => {
+                        setSelectedAddItemType(ADD_NEW_ITEM_TYPES[0].key);
+                        setShowAddItemModal(true);
+                      }}
+                    >
+                      ADD NEW ITEM
+                    </button>
+                  )}
+
                   {/* Cancel — like the hotel page: greyed out from the hotel
                       check-in date on, gone once cancelled. */}
                   {!isCancelled && (
@@ -1752,15 +2004,18 @@ export default function OfflineBookingDetailView() {
                   {canConfirm && (
                     <button
                       style={{ ...BTN_SUCCESS, opacity: confirming ? 0.7 : 1 }}
-                      onClick={handleConfirm}
+                      onClick={() => setShowConfirmModal(true)}
                       disabled={confirming}
                       title="Confirm this On Request booking"
                     >
                       {confirming ? "CONFIRMING..." : "CONFIRM"}
                     </button>
                   )}
-                  {/* No voucher until the booking is confirmed (the server refuses it too),
-                      and none once cancelled — the hotel page keeps only the invoice then. */}
+                  {/* Voucher / Invoice — as on the hotel booking page: not shown
+                      while the booking is still On Request (not yet confirmed);
+                      once cancelled only the invoice stays. Before, the voucher
+                      showed greyed out and the invoice showed while On Request;
+                      kept commented out:
                   {!isCancelled && (
                     <button
                       style={{
@@ -1778,13 +2033,50 @@ export default function OfflineBookingDetailView() {
                   <button style={BTN_INFO} onClick={() => handlePdfClick("INVOICE")} title="Invoice">
                     INVOICE
                   </button>
+                  */}
+                  {/* Reconfirm step — the hotel page's flow:
+                        On Request → CONFIRM (above), no documents;
+                        Confirmed → RECONFIRM + PROFORMA VOUCHER / INVOICE;
+                        ReConfirmed (or confirmed before the step existed) → VOUCHER / INVOICE;
+                        Cancelled → INVOICE if it was final, else the Proforma pair.
+                      Server PDF types: PROFORMA_VOUCHER, INVOICE (= Proforma
+                      Invoice), VOUCHER, TAX (= the final Invoice, as the hotel's). */}
+                  {canReconfirm && (
+                    <button style={BTN_TEAL} onClick={() => setShowConfirmModal(true)}>
+                      RECONFIRM
+                    </button>
+                  )}
+                  {awaitingReconfirm && (
+                    <>
+                      {docButton("PROFORMA_VOUCHER", "Proforma Voucher", "PROFORMA VOUCHER")}
+                      {docButton("INVOICE", "Proforma Invoice", "PROFORMA INVOICE")}
+                    </>
+                  )}
+                  {showsFinalDocs && (
+                    <>
+                      {docButton("VOUCHER", "Voucher", "VOUCHER")}
+                      {docButton("TAX", "Invoice", "INVOICE")}
+                    </>
+                  )}
+                  {/* Cancelled — the hotel page's cancelled row: the final
+                      Invoice if it was reconfirmed (final) before it was
+                      cancelled, else the Proforma Voucher / Invoice. */}
+                  {isCancelled &&
+                    (cancelledShowsFinalDocs ? (
+                      docButton("TAX", "Invoice", "INVOICE")
+                    ) : (
+                      <>
+                        {docButton("PROFORMA_VOUCHER", "Proforma Voucher", "PROFORMA VOUCHER")}
+                        {docButton("INVOICE", "Proforma Invoice", "PROFORMA INVOICE")}
+                      </>
+                    ))}
 
                   {/* The hotel booking details page's booking actions. */}
                   <button
                     style={BTN_SKY}
                     onClick={() => {
                       if (!confirmedForReferences) {
-                        toast.error("Agent Reference can only be added once the booking is Confirmed.");
+                        toast.error("Agent Reference can only be added once the booking is Confirmed or ReConfirmed.");
                         return;
                       }
                       openAgentRefModal();
@@ -1798,7 +2090,9 @@ export default function OfflineBookingDetailView() {
                       style={BTN_INDIGO}
                       onClick={() => {
                         if (!confirmedForReferences) {
-                          toast.error("Confirmation Number can only be added once the booking is Confirmed.");
+                          toast.error(
+                            "Hotel Confirmation Number can only be added once the booking is Confirmed or ReConfirmed.",
+                          );
                           return;
                         }
                         openConfirmationNoModal();
@@ -1832,13 +2126,371 @@ export default function OfflineBookingDetailView() {
                     HISTORY
                   </button>
                 </div>
+
+                {/* ── Booking Date footer — as on the hotel booking page ── */}
+                <div
+                  style={{
+                    textAlign: "right",
+                    fontSize: "0.8rem",
+                    color: "#555",
+                    paddingBottom: "8px",
+                  }}
+                >
+                  {/* Hotel page format: "27 Nov 2026 15:13:42" (seconds when saved). */}
+                  Booking Date :{" "}
+                  {(() => {
+                    const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(
+                      String(booking.bookingDate || ""),
+                    );
+                    if (!m) return booking.bookingDate || "-";
+                    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                    return `${m[3]} ${months[Number(m[2]) - 1]} ${m[1]} ${m[4]}:${m[5]}${m[6] ? `:${m[6]}` : ""}`;
+                  })()}
+                </div>
+
+                {/* ── Add New Item booking-type picker — as on the hotel page ── */}
+                <Modal show={showAddItemModal} onHide={() => setShowAddItemModal(false)} centered>
+                  <Modal.Header closeButton>
+                    <Modal.Title style={{ fontSize: "1.05rem" }}>Add New Item</Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body>
+                    <div style={{ marginBottom: "10px", color: "#555" }}>
+                      Select a booking type to add as a sub-booking of{" "}
+                      <strong>{booking.invoiceNumber}</strong>.
+                    </div>
+                    <Form>
+                      {ADD_NEW_ITEM_TYPES.map((t) => (
+                        <Form.Check
+                          key={t.key}
+                          type="radio"
+                          name="addNewItemType"
+                          id={`add-item-${t.key}`}
+                          label={t.label}
+                          value={t.key}
+                          checked={selectedAddItemType === t.key}
+                          onChange={() => setSelectedAddItemType(t.key)}
+                          style={{ marginBottom: "6px" }}
+                        />
+                      ))}
+                    </Form>
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowAddItemModal(false)}>
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => {
+                        const chosen = ADD_NEW_ITEM_TYPES.find((t) => t.key === selectedAddItemType);
+                        if (!chosen || !booking.invoiceNumber) return;
+                        setShowAddItemModal(false);
+                        navigate(
+                          `${chosen.route}?parentBookingCode=${encodeURIComponent(booking.invoiceNumber)}`,
+                        );
+                      }}
+                    >
+                      Continue
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
+
+                {/* ── Confirm / Reconfirm Booking dialog — the hotel page's ──
+                     CONFIRM (On Request) and RECONFIRM open it. Confirm also
+                     notes the deadline and the agent-credit debit (offline
+                     rule) and offers Reject, as the hotel page does; the
+                     Reconfirm flow has no Reject, as there. */}
+                <Modal
+                  show={showConfirmModal}
+                  onHide={() => {
+                    if (!confirming && !reconfirming) setShowConfirmModal(false);
+                  }}
+                  centered
+                  backdrop="static"
+                  keyboard={false}
+                >
+                  <Modal.Header
+                    closeButton={!confirming && !reconfirming}
+                    style={{ backgroundColor: "#fff", borderBottom: "2px solid #e9ecef" }}
+                  >
+                    <Modal.Title className="fw-bold d-flex align-items-center">
+                      <FaExclamationCircle className="me-2 text-warning" />
+                      <span>{isOnRequest ? "Confirm Booking" : "Reconfirm Booking"}</span>
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body style={{ padding: "1.5rem" }}>
+                    <div className="text-center">
+                      <p className="fs-5 mb-3">
+                        {isOnRequest
+                          ? "Are you sure you want to confirm the booking?"
+                          : "Are you sure you want to reconfirm the booking?"}
+                      </p>
+                      <div className="text-muted small mb-3">
+                        <div>
+                          <strong>Booking Code:</strong> {booking.invoiceNumber || "N/A"}
+                        </div>
+                        {(hotelNames.length > 0 || booking.hotelName) && (
+                          <div>
+                            <strong>Hotel:</strong> {hotelNames.length ? hotelNames.join(", ") : booking.hotelName}
+                          </div>
+                        )}
+                      </div>
+                      {isOnRequest && (
+                        <div className="small">
+                          {booking.cancellationDeadline && (
+                            <div>
+                              Cancellation deadline: {formatUaeDateTime(booking.cancellationDeadline)} (UAE time)
+                            </div>
+                          )}
+                          {Number(totalsView.grandTotal) > 0 && (
+                            <>
+                              <div style={{ marginTop: 8 }}>
+                                <b>AED {money(totalsView.grandTotal)}</b> will be debited from{" "}
+                                {booking.agentName || "the agent"}'s credit.
+                              </div>
+                              <div style={{ marginTop: 6, color: "#842029" }}>
+                                Cancelled before the cancellation deadline, it is refunded; cancelled after the
+                                deadline, it is not.
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </Modal.Body>
+                  <Modal.Footer style={{ backgroundColor: "#f8f9fa", borderTop: "1px solid #dee2e6" }}>
+                    {isOnRequest && (
+                      <Button variant="outline-danger" onClick={openRejectModal} disabled={confirming}>
+                        Reject
+                      </Button>
+                    )}
+                    <Button
+                      variant="success"
+                      onClick={isOnRequest ? handleConfirm : reconfirmBooking}
+                      disabled={confirming || reconfirming}
+                    >
+                      {confirming || reconfirming ? (
+                        <>
+                          <Spinner animation="border" size="sm" className="me-2" />
+                          {isOnRequest ? "Confirming..." : "Reconfirming..."}
+                        </>
+                      ) : isOnRequest ? (
+                        "Confirm"
+                      ) : (
+                        "Reconfirm"
+                      )}
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
+
+                {/* ── Reject Booking dialog — the hotel page's (from Confirm → Reject).
+                     Cancels the booking with "Rejected by …" as its reason. ── */}
+                <Modal
+                  show={showRejectModal}
+                  onHide={() => {
+                    if (!rejectingBooking) setShowRejectModal(false);
+                  }}
+                  centered
+                  backdrop="static"
+                  keyboard={false}
+                >
+                  <Modal.Header
+                    closeButton={!rejectingBooking}
+                    style={{ backgroundColor: "#fff", borderBottom: "2px solid #e9ecef" }}
+                  >
+                    <Modal.Title className="fw-bold d-flex align-items-center">
+                      <FaExclamationCircle className="me-2 text-danger" />
+                      <span>Reject Booking</span>
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body style={{ padding: "1.5rem" }}>
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-semibold">
+                        Rejected By <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={rejectedBy}
+                        onChange={(e) => {
+                          setRejectedBy(e.target.value);
+                          if (rejectedByError) setRejectedByError("");
+                        }}
+                        isInvalid={!!rejectedByError}
+                        placeholder="Enter name"
+                        disabled={rejectingBooking}
+                        autoFocus
+                      />
+                      <Form.Control.Feedback type="invalid">{rejectedByError}</Form.Control.Feedback>
+                    </Form.Group>
+                    <Form.Group className="mb-2">
+                      <Form.Label className="fw-semibold">
+                        Remarks <span className="text-muted small">(optional)</span>
+                      </Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        value={rejectionRemarks}
+                        onChange={(e) => setRejectionRemarks(e.target.value)}
+                        placeholder="Reason for rejection"
+                        disabled={rejectingBooking}
+                      />
+                    </Form.Group>
+                  </Modal.Body>
+                  <Modal.Footer style={{ backgroundColor: "#f8f9fa", borderTop: "1px solid #dee2e6" }}>
+                    <Button variant="secondary" onClick={() => setShowRejectModal(false)} disabled={rejectingBooking}>
+                      Cancel
+                    </Button>
+                    <Button variant="danger" onClick={rejectBooking} disabled={rejectingBooking}>
+                      {rejectingBooking ? (
+                        <>
+                          <Spinner animation="border" size="sm" className="me-2" />
+                          Rejecting...
+                        </>
+                      ) : (
+                        "Reject Booking"
+                      )}
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
               </>
             )}
           </Container>
         </main>
       </div>
 
-      {/* PDF Modal — iframe preview + email-send form (unchanged) */}
+      {/* Document preview — the hotel booking page's: opened by the document
+          buttons once the PDF is ready. Open in new tab, Download and, for
+          admins, ✉ Send Email (→ Send Document Email below). */}
+      <Modal show={!!pdfPreview} onHide={() => setPdfPreview(null)} size="xl" centered backdrop="static" keyboard>
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1rem", fontWeight: 700 }}>
+            {pdfPreview?.label || "Document"}
+            {booking?.invoiceNumber ? ` — ${booking.invoiceNumber}` : ""}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ padding: 0, height: "80vh" }}>
+          {pdfPreview?.url ? (
+            <iframe
+              key={pdfPreview.url}
+              src={pdfPreview.url}
+              title={pdfPreview.label || "PDF preview"}
+              style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+            />
+          ) : (
+            <div className="text-center text-muted py-5">No PDF loaded.</div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          {pdfPreview?.url && (
+            <>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => window.open(pdfPreview.url, "_blank", "noopener,noreferrer")}
+              >
+                Open in new tab
+              </Button>
+              <Button
+                variant="outline-primary"
+                size="sm"
+                as="a"
+                href={pdfPreview.url}
+                download={`Booking_${booking?.invoiceNumber || id}_${pdfPreview.type || "document"}.pdf`}
+              >
+                Download
+              </Button>
+              {isAdminRole && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    const labelToDocType = {
+                      Voucher: "VOUCHER",
+                      "Proforma Voucher": "PROFORMA_VOUCHER",
+                      Invoice: "INVOICE",
+                      "Proforma Invoice": "PROFORMA_INVOICE",
+                    };
+                    openSendEmailModal(
+                      labelToDocType[pdfPreview.label] || "VOUCHER",
+                      pdfPreview.label || "Document",
+                    );
+                  }}
+                >
+                  ✉ Send Email
+                </Button>
+              )}
+            </>
+          )}
+          <Button variant="secondary" size="sm" onClick={() => setPdfPreview(null)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Send Document Email — the hotel booking page's dialog. */}
+      <Modal
+        show={showSendEmailModal}
+        onHide={() => {
+          if (!sendingEmail) setShowSendEmailModal(false);
+        }}
+        centered
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton={!sendingEmail} style={{ backgroundColor: "#fff", borderBottom: "2px solid #e9ecef" }}>
+          <Modal.Title className="fw-bold">Send {sendEmailDocLabel} via Email</Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ padding: "1.5rem" }}>
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-semibold">
+              Recipient Email <span className="text-danger">*</span>
+            </Form.Label>
+            <Form.Control
+              type="email"
+              value={sendEmailRecipient}
+              onChange={(e) => {
+                setSendEmailRecipient(e.target.value);
+                if (sendEmailError) setSendEmailError("");
+              }}
+              isInvalid={!!sendEmailError}
+              placeholder="recipient@example.com"
+              disabled={sendingEmail}
+              autoFocus
+            />
+            <Form.Control.Feedback type="invalid">{sendEmailError}</Form.Control.Feedback>
+          </Form.Group>
+          <Form.Group className="mb-2">
+            <Form.Label className="fw-semibold">
+              Note <span className="text-muted small">(optional)</span>
+            </Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={sendEmailNote}
+              onChange={(e) => setSendEmailNote(e.target.value)}
+              placeholder="Add a message for the recipient"
+              disabled={sendingEmail}
+            />
+          </Form.Group>
+          <div className="text-muted small">A fresh PDF will be generated and attached automatically.</div>
+        </Modal.Body>
+        <Modal.Footer style={{ backgroundColor: "#f8f9fa", borderTop: "1px solid #dee2e6" }}>
+          <Button variant="secondary" onClick={() => setShowSendEmailModal(false)} disabled={sendingEmail}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={sendDocumentEmail} disabled={sendingEmail}>
+            {sendingEmail ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Sending...
+              </>
+            ) : (
+              "Send Email"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Before — the old PDF dialog (preview + inline email box), kept commented out:
       <Modal
         show={showPdfModal}
         onHide={closePdfModal}
@@ -1929,6 +2581,7 @@ export default function OfflineBookingDetailView() {
           </Button>
         </Modal.Footer>
       </Modal>
+      */}
 
       {/* Cancel Booking Modal — same dialog as the hotel booking details page */}
       <Modal show={showCancelModal} onHide={closeCancelModal} centered backdrop="static" keyboard={false}>
