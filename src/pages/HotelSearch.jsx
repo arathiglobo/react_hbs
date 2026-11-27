@@ -988,7 +988,7 @@ export default function HotelSearch({
 
   function debounce(func, wait) {
     let timeout;
-    return function executedFunction(...args) {
+    const executedFunction = (...args) => {
       const later = () => {
         clearTimeout(timeout);
         func(...args);
@@ -996,6 +996,9 @@ export default function HotelSearch({
       clearTimeout(timeout);
       timeout = setTimeout(later, wait);
     };
+    // Drops a call still waiting to run (e.g. a name typed just before Search).
+    executedFunction.cancel = () => clearTimeout(timeout);
+    return executedFunction;
   }
 
   const debouncedCitySearch = useRef(
@@ -1102,6 +1105,17 @@ export default function HotelSearch({
       setFinalHotelSearchTerm(term);
     }, 500),
   ).current;
+
+  // Empties the hotel-name box AND the term the fetches send
+  // (finalHotelSearchTerm, set 500 ms after typing), and drops a pending
+  // copy. Emptying only the box left the old name in every fetch: a name
+  // search loads all hotels as one page, so after Modify Search → Search,
+  // Clear or Clear All Filters the list stayed on one page ("1 to 32 of 32").
+  const clearHotelNameSearch = () => {
+    debouncedSetFinalTerm.cancel();
+    setHotelSearchTerm("");
+    setFinalHotelSearchTerm("");
+  };
 
   useEffect(() => {
     if (checkIn && checkOut) {
@@ -1898,6 +1912,8 @@ export default function HotelSearch({
       setHasSearched(false);
       return;
     }
+
+    clearHotelNameSearch();
 
     setErrors({});
     // Start a new search generation and forget the previous searchId BEFORE
@@ -3491,7 +3507,7 @@ export default function HotelSearch({
                               setPriceSlider(null);
                               setPriceRange(null);
                               setSortBy("priceAsc");
-                              setHotelSearchTerm("");
+                              clearHotelNameSearch();
                             }}
                           >
                             Clear
@@ -3980,7 +3996,7 @@ export default function HotelSearch({
                                   setHotelType([]);
                                   setChannelType([]);
                                   setSortBy("priceAsc");
-                                  setHotelSearchTerm("");
+                                  clearHotelNameSearch();
                                   setAvailableDeals([])
                                   setRefundPolicy({ refundable: false, partial: false, nonRefundable: false });
                                 }}
