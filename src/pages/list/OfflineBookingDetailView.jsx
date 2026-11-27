@@ -263,7 +263,7 @@ export default function OfflineBookingDetailView() {
     setConfirming(true);
     try {
       const res = await axiosInstance.post(
-        `api/v1/offline-booking/${booking.supplierMainBasicId}/confirm`,
+        `/api/v1/offline-booking/${booking.supplierMainBasicId}/confirm`,
         // Booking History: where it was confirmed from (the server adds the IP).
         { bookingLocation: operatorLocation },
       );
@@ -323,7 +323,7 @@ export default function OfflineBookingDetailView() {
     setCancellingBooking(true);
     try {
       const res = await axiosInstance.post(
-        `api/v1/offline-booking/${booking.supplierMainBasicId}/cancel`,
+        `/api/v1/offline-booking/${booking.supplierMainBasicId}/cancel`,
         // Booking History: where it was cancelled from (the server adds the IP).
         // Past the deadline, the operator's acceptance that nothing is refunded.
         {
@@ -356,7 +356,7 @@ export default function OfflineBookingDetailView() {
   const loadDetails = useCallback(async () => {
     setLoadingItems(true);
     try {
-      const res = await axiosInstance.get(`api/v1/offline-booking/${id}/details`);
+      const res = await axiosInstance.get(`/api/v1/offline-booking/${id}/details`);
       setBooking((prev) => ({ ...(prev || {}), ...(res.data?.booking || {}) }));
       setItems(Array.isArray(res.data?.lines) ? res.data.lines : []);
       setTotals(res.data?.totals || null);
@@ -366,7 +366,7 @@ export default function OfflineBookingDetailView() {
       if (fromList?.invoiceNumber && fromList?.supplierMainBasicId) {
         try {
           const res = await axiosInstance.get(
-            `api/v1/offline-booking/list/${fromList.invoiceNumber}/${fromList.supplierMainBasicId}`,
+            `/api/v1/offline-booking/list/${fromList.invoiceNumber}/${fromList.supplierMainBasicId}`,
           );
           setItems(Array.isArray(res.data) ? res.data : []);
         } catch (e2) {
@@ -435,7 +435,7 @@ export default function OfflineBookingDetailView() {
     setPdfUrl("");
     try {
       const response = await axiosInstance.get(
-        `api/offline_booking/${booking.supplierMainBasicId}/pdf`,
+        `/api/offline_booking/${booking.supplierMainBasicId}/pdf`,
         { params: { type: type.toUpperCase() } },
       );
       if (response.data && response.data.status === "SUCCESS") {
@@ -468,7 +468,7 @@ export default function OfflineBookingDetailView() {
     setSendingMail(true);
     try {
       const response = await axiosInstance.post(
-        "api/v1/offline-booking/send-pdf-email",
+        "/api/v1/offline-booking/send-pdf-email",
         {
           email,
           pdfUrl,
@@ -557,7 +557,7 @@ export default function OfflineBookingDetailView() {
     setAgentRefError("");
     setShowAgentRefModal(true);
     try {
-      const res = await axiosInstance.get(`api/v1/offline-booking/${id}/agent-reference`);
+      const res = await axiosInstance.get(`/api/v1/offline-booking/${id}/agent-reference`);
       const saved = res?.data?.agentLpo;
       if (saved) setAgentRefInput(saved);
     } catch (err) {
@@ -575,7 +575,7 @@ export default function OfflineBookingDetailView() {
     setAgentRefError("");
     try {
       setSavingAgentRef(true);
-      const res = await axiosInstance.post(`api/v1/offline-booking/${id}/agent-reference`, {
+      const res = await axiosInstance.post(`/api/v1/offline-booking/${id}/agent-reference`, {
         agentLpo: value,
       });
       if (res.data && res.data.success) {
@@ -604,7 +604,7 @@ export default function OfflineBookingDetailView() {
     setConfirmationNoError("");
     setShowConfirmationNoModal(true);
     try {
-      const res = await axiosInstance.get(`api/v1/offline-booking/${id}/agent-reference`);
+      const res = await axiosInstance.get(`/api/v1/offline-booking/${id}/agent-reference`);
       const saved = res?.data?.confirmationNumber;
       if (saved) setConfirmationNoInput(saved);
     } catch (err) {
@@ -621,7 +621,7 @@ export default function OfflineBookingDetailView() {
     setConfirmationNoError("");
     try {
       setSavingConfirmationNo(true);
-      const res = await axiosInstance.post(`api/v1/offline-booking/${id}/confirmation-no`, {
+      const res = await axiosInstance.post(`/api/v1/offline-booking/${id}/confirmation-no`, {
         confirmationNumber: value,
       });
       if (res.data && res.data.success) {
@@ -657,7 +657,7 @@ export default function OfflineBookingDetailView() {
     }
     try {
       setSavingRemark(true);
-      const res = await axiosInstance.post(`api/v1/offline-booking/${id}/remark`, { remarks: text });
+      const res = await axiosInstance.post(`/api/v1/offline-booking/${id}/remark`, { remarks: text });
       if (res.data && res.data.success !== false) {
         setShowRemarkModal(false);
         toast.success(res.data?.message || "Remark saved successfully");
@@ -684,7 +684,7 @@ export default function OfflineBookingDetailView() {
     if (!id) return undefined;
     setNotesLoading(true);
     return axiosInstance
-      .get(`api/v1/offline-booking/${id}/notes`)
+      .get(`/api/v1/offline-booking/${id}/notes`)
       .then((res) => {
         setBookingNotes(
           res.data && res.data.success !== false && Array.isArray(res.data.notes) ? res.data.notes : [],
@@ -712,7 +712,7 @@ export default function OfflineBookingDetailView() {
     try {
       setSavingNote(true);
       // The server records who added it (the signed-in login).
-      const res = await axiosInstance.post(`api/v1/offline-booking/${id}/notes`, { noteText: text });
+      const res = await axiosInstance.post(`/api/v1/offline-booking/${id}/notes`, { noteText: text });
       if (res.data?.success) {
         toast.success(res.data?.message || "Note saved");
         setShowNotesModal(false);
@@ -749,7 +749,7 @@ export default function OfflineBookingDetailView() {
       const agentId = booking?.agentId ? Number(String(booking.agentId).trim()) : null;
       const [docRes, agentRes] = await Promise.all([
         axiosInstance
-          .get(`api/offline_booking/${id}/pdf`, { params: { type: resendDocType } })
+          .get(`/api/offline_booking/${id}/pdf`, { params: { type: resendDocType } })
           .catch(() => null),
         agentId ? axiosInstance.get(`/api/agent/${agentId}`).catch(() => null) : Promise.resolve(null),
       ]);
@@ -776,7 +776,7 @@ export default function OfflineBookingDetailView() {
     setResendMailEmailError("");
     try {
       setResendingMail(true);
-      const res = await axiosInstance.post(`api/v1/offline-booking/${id}/resend-mail`, null, {
+      const res = await axiosInstance.post(`/api/v1/offline-booking/${id}/resend-mail`, null, {
         params: { email },
       });
       if (res.data && res.data.success !== false) {

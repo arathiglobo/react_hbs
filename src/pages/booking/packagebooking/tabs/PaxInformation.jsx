@@ -596,6 +596,8 @@ const PaxInformation = forwardRef(({
         countryId: searchParams.destinationCountryId,
         cityId: searchParams.destinationCityId || "", // City ID from search or basic details
         travelDate: searchParams.travelDate,
+        // Lets the server's price check use the Hotels step's stay-overlap rule.
+        departureDate: searchParams.departureDate || null,
         packageCategory: searchParams.packageCategory,
         nativeCountry: searchParams.nativeCountry,
         // Booking History audit — client location (backend stamps the IP).

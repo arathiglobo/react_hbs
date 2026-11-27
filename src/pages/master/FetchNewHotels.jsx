@@ -38,20 +38,20 @@ const FetchNewHotels = () => {
   });
 
   const platformCountryApis = {
-    Iwtx: { countries: "api/iwtx/countrylist" },
+    Iwtx: { countries: "/api/iwtx/countrylist" },
     Darina: { countries: "/api/darina/countrylist" },
     Jumeirah: { countries: "/api/jumeirah/countrylist" },
-    X3: { countries: "api/iwtx/countrylist" },
+    X3: { countries: "/api/iwtx/countrylist" },
     Ratehawk: { countries: "/api/ratehawk/countrylist" },
     Atharva: { countries: "/api/atharva/countrylist" },
     [ATHARVA_V2_PLATFORM]: { countries: "/api/atharva-v2/countrylist" },
   };
 
   const platformCityApis = {
-    Iwtx: { cities: "api/iwtx/citylist" },
+    Iwtx: { cities: "/api/iwtx/citylist" },
     Darina: { cities: "/api/darina/citylist" },
     Jumeirah: { cities: "/api/jumeirah/citylist" },
-    X3: { cities: "api/iwtx/citylist" },
+    X3: { cities: "/api/iwtx/citylist" },
     Ratehawk: { cities: "/api/ratehawk/citylist" },
     Atharva: { cities: "/api/atharva/citylist" },
     [ATHARVA_V2_PLATFORM]: { cities: "/api/atharva-v2/citylist" },
@@ -198,7 +198,7 @@ const FetchNewHotels = () => {
     setIsLoading(true);
     try {
       const response = await axiosInstance.get(
-        "api/hotelMapping/fetchFromApi",
+        "/api/hotelMapping/fetchFromApi",
         {
           params: {
             countryId: formData.apiCountryId,

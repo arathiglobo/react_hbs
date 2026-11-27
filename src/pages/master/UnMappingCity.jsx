@@ -74,10 +74,10 @@ const UnMappingCity = () => {
   const [isUnmapping, setIsUnmapping] = useState(false);
 
   const platformCountryApis = {
-    Iwtx: { countries: "api/iwtx/countrylist" },
+    Iwtx: { countries: "/api/iwtx/countrylist" },
     Darina: { countries: "/api/darina/countrylist" },
     Jumeirah: { countries: "/api/jumeirah/countrylist" },
-    X3: { countries: "api/iwtx/countrylist" },
+    X3: { countries: "/api/iwtx/countrylist" },
     Ratehawk: { countries: "/api/ratehawk/countrylist" },
     Atharva: { countries: "/api/atharva/countrylist" },
     Grn: { countries: "/api/grn/countrylist" },
@@ -86,7 +86,7 @@ const UnMappingCity = () => {
   };
 
   const platformCityApis = {
-    Iwtx: { cities: "api/iwtx/citylist" },
+    Iwtx: { cities: "/api/iwtx/citylist" },
     Darina: { cities: "/api/darina/citylist" },
     Jumeirah: { cities: "/api/jumeirah/citylist" },
     X3: { cities: "/api/iwtx/citylist" },

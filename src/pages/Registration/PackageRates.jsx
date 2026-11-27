@@ -90,6 +90,12 @@ const PackageRates = () => {
     },
   ]);
   const [packageCategories, setPackageCategories] = useState([]);
+  // How many guests each of the package's sharing options takes, from its
+  // Package Category master (eg. Twin Sharing: 2 adults + 2 children =
+  // occupancy 4), keyed by category id. The package search lists the package
+  // for up to that many guests, so the save checks that an Occupancy row of
+  // this rate covers it (see validateForm).
+  const [categoryCapacity, setCategoryCapacity] = useState({});
   const [isLoadingPackageCategories, setIsLoadingPackageCategories] = useState(false);
   const [isAddingValidity, setIsAddingValidity] = useState(false);
   const [isAddingOccupancy, setIsAddingOccupancy] = useState(false);
@@ -133,6 +139,11 @@ const PackageRates = () => {
   const [quickAdd, setQuickAdd] = useState(null);
   const [quickAddHotelName, setQuickAddHotelName] = useState("");
   const [quickAddRoomTypeName, setQuickAddRoomTypeName] = useState("");
+  // Rate column hidden (2026-11-27): the hotel Rate is commented out, not
+  // removed, and is no longer required. Search "Rate column hidden" to bring it back.
+  // The typed-in hotel's Rate: its total booking amount, charged as entered
+  // and shown as "Final Booking Amount" on the package search's View page.
+  // const [quickAddRate, setQuickAddRate] = useState("");
   const [quickAddErrors, setQuickAddErrors] = useState({});
 
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
@@ -143,6 +154,29 @@ const PackageRates = () => {
   const packageId = packageInfo.package?.packageId || 0;
   const packageName = packageInfo.packageName || "Unknown Package";
   const packageCode = packageInfo.packageCode || "Unknown";
+  // The package's Arriving Destination country (from the package list row).
+  const packageCountryId = packageInfo.package?.arriveCountry ?? null;
+
+  // New Booking lists a package by its own destination country, but its Hotels
+  // step then reads hotels only from rates whose Country is that same
+  // country. A rate saved for another country leaves the package listed with
+  // no hotels, so saving one asks first.
+  const confirmRateCountry = async () => {
+    if (packageCountryId == null || !formData.countryId) return true;
+    if (String(formData.countryId) === String(packageCountryId)) return true;
+    const result = await Swal.fire({
+      title: "Country is not the package's destination",
+      text:
+        `This rate's Country (${selectedCountryOption?.label || "the selected country"}) is not ` +
+        "the package's Arriving Destination. New Booking lists this package for its destination, " +
+        "so this rate's hotels won't show there. Save anyway?",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Save anyway",
+      cancelButtonText: "Go back",
+    });
+    return result.isConfirmed;
+  };
 
   // Food-preference choices captured on the Package Rate create/edit
   // modal. Values match the backend column (nullable String) so the
@@ -361,6 +395,10 @@ const PackageRates = () => {
     );
   };
 
+  // validationErrors key for one sharing option + occupancy's Per Adult Rate.
+  const hotelAdultRateErrorKey = (categoryKey, occupancyId) =>
+    `hotelAdultRate_${categoryKey}_${occupancyId}`;
+
   const validateForm = (data) => {
     const errors = {};
 
@@ -381,8 +419,35 @@ const PackageRates = () => {
     const invalidOccupancy = occupancyList.some(
       (o) => !o.minimumPax || !o.maximumPax
     );
-    if (invalidOccupancy)
+    if (invalidOccupancy) {
       errors.occupancyList = "All occupancy must have minimum and maximum pax";
+      toast.error("All occupancy must have Minimum Pax and Maximum Pax.");
+    }
+
+    // Minimum / Maximum Pax are the guest range (adults + children) this
+    // rate's prices apply to: whole numbers of 1 or more, Minimum not above
+    // Maximum. A row like Min 4 / Max 1 takes no guest count, so New Booking
+    // would show "No hotels found" for every search. Checked once both are
+    // filled in.
+    let badOccupancy = false;
+    if (!invalidOccupancy) {
+      const occupancyProblems = [];
+      occupancyList.forEach((o, i) => {
+        const label = occupancyList.length > 1 ? `Occupancy ${i + 1}: ` : "";
+        const min = Number(o.minimumPax);
+        const max = Number(o.maximumPax);
+        if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || max < 1) {
+          occupancyProblems.push(`${label}Minimum and Maximum Pax must be whole numbers of 1 or more.`);
+        } else if (min > max) {
+          occupancyProblems.push(`${label}Minimum Pax (${min}) is more than Maximum Pax (${max}).`);
+        }
+      });
+      if (occupancyProblems.length) {
+        badOccupancy = true;
+        errors.occupancyList = occupancyProblems.join(" ");
+        toast.error(occupancyProblems.join(" "));
+      }
+    }
 
     const hasEnabledCategory = Object.values(data.rates || {}).some(
       (rate) => rate.enabled === true
@@ -390,6 +455,69 @@ const PackageRates = () => {
     if (!hasEnabledCategory) {
       errors.packageAccommodationrateDTO =
         "At least one package category must be selected";
+    }
+
+    // Per Adult Rate is required (greater than 0) for every ticked sharing
+    // option + occupancy that lists a hotel. New Booking prices each hotel as
+    // Per Adult Rate × adults + Per Child (With Bed) × children, so a blank
+    // one shows the hotels at 0 and the Total Price falls back to another
+    // figure. Blocks with no hotel listed are not checked. Hotels are counted
+    // the same way the save does (hotelRowToPayload).
+    const missingAdultRate = [];
+    (Array.isArray(packageCategories) ? packageCategories : []).forEach((category) => {
+      const categoryKey = (category.packageCategoryId || category.id || "").toString();
+      if (data.rates?.[categoryKey]?.enabled !== true) return;
+      occupancyList.forEach((occ) => {
+        const occRate = data.rates[categoryKey].occupancyRates?.[occ.id] || {};
+        const rows = Array.isArray(occRate.hotelRows) ? occRate.hotelRows : [];
+        const hasHotel = rows.some(
+          (row) => row?.hotelId || (isTypedHotelRow(row) && row.hotelName.trim())
+        );
+        if (!hasHotel) return;
+        if (!(Number(occRate.hotelCommonRate?.adultRate) > 0)) {
+          errors[hotelAdultRateErrorKey(categoryKey, occ.id)] = "Per Adult Rate is required";
+          const sharing = (category.name || category.categoryName || "Unknown").toUpperCase();
+          missingAdultRate.push(
+            occupancyList.length > 1
+              ? `${sharing} (${occ.minimumPax || "?"} – ${occ.maximumPax || "?"} pax)`
+              : sharing
+          );
+        }
+      });
+    });
+    // The field can be scrolled out of sight when Save is clicked, so say
+    // why the save did not go through.
+    if (missingAdultRate.length) {
+      toast.error(`Per Adult Rate is required for ${missingAdultRate.join(", ")}.`);
+    }
+
+    // Occupancy must cover each ticked sharing option's guests. The package
+    // search lists the package for up to the sharing option's capacity (eg.
+    // Twin Sharing = 4: 2 adults + 2 children), but after Next the hotel list
+    // only uses Occupancy rows whose Minimum–Maximum Pax include the guest
+    // count, so a rate with only 1 – 2 showed "No hotels found" for 4 guests.
+    // Skipped while an Occupancy row is missing or has an invalid min / max.
+    if (!invalidOccupancy && !badOccupancy) {
+      const uncovered = [];
+      (Array.isArray(packageCategories) ? packageCategories : []).forEach((category) => {
+        const categoryKey = (category.packageCategoryId || category.id || "").toString();
+        if (data.rates?.[categoryKey]?.enabled !== true) return;
+        const guests = categoryCapacity[categoryKey];
+        if (!guests) return;
+        const covered = occupancyList.some(
+          (o) => Number(o.minimumPax) <= guests && guests <= Number(o.maximumPax)
+        );
+        if (!covered) {
+          const sharing = category.name || category.categoryName || "This sharing option";
+          uncovered.push(
+            `${sharing} takes ${guests} guests on the package; set an Occupancy that includes ${guests}.`
+          );
+        }
+      });
+      if (uncovered.length) {
+        errors.occupancyList = uncovered.join(" ");
+        toast.error(uncovered.join(" "));
+      }
     }
 
     return errors;
@@ -633,6 +761,34 @@ const PackageRates = () => {
     }
   };
 
+  // Each sharing option's guest capacity: its master Occupancy, or adults +
+  // children when Occupancy is blank. A category that fails to load, or has
+  // no capacity set, is simply not checked on save.
+  const loadCategoryCapacity = async (categories) => {
+    const ids = (Array.isArray(categories) ? categories : [])
+      .map((c) => c?.packageCategoryId || c?.id)
+      .filter((id) => id != null);
+    const results = await Promise.allSettled(
+      ids.map((id) => axiosInstance.get(`/api/packageCategory/${id}`))
+    );
+    const map = {};
+    results.forEach((r, i) => {
+      if (r.status !== "fulfilled" || !r.value?.data) return;
+      const c = r.value.data;
+      const occupancy = Number(c.occupancy);
+      const adults = Number(c.adults);
+      const children = Number(c.children);
+      const guests =
+        occupancy > 0
+          ? occupancy
+          : Number.isFinite(adults) && Number.isFinite(children) && adults + children > 0
+          ? adults + children
+          : null;
+      if (guests) map[String(ids[i])] = guests;
+    });
+    setCategoryCapacity(map);
+  };
+
   const fetchPackageDetails = async () => {
     try {
       setIsLoadingPackageCategories(true);
@@ -643,6 +799,7 @@ const PackageRates = () => {
       const allCategories = categoriesResponse.data || [];
       console.log("All available package categories:", allCategories);
       setPackageCategories(allCategories);
+      loadCategoryCapacity(allCategories);
     } catch (error) {
       console.log("Error fetching package categories:", error);
       setPackageCategories([]);
@@ -699,6 +856,7 @@ const PackageRates = () => {
       setValidationErrors(errors);
       return;
     }
+    if (!(await confirmRateCountry())) return;
 
     try {
       setIsLoading(true);
@@ -798,6 +956,7 @@ const PackageRates = () => {
       setValidationErrors(errors);
       return;
     }
+    if (!(await confirmRateCountry())) return;
 
     try {
       setIsLoading(true);
@@ -1342,6 +1501,10 @@ const PackageRates = () => {
     setOccupancyList(
       occupancyList.map((o) => (o.id === id ? { ...o, [field]: value } : o))
     );
+    // Editing an Occupancy clears its error until the next Save checks again.
+    if (validationErrors.occupancyList) {
+      setValidationErrors((prev) => ({ ...prev, occupancyList: "" }));
+    }
   };
 
   // Simpler per-occupancy shape (redesigned 2026-08-13 per client ask —
@@ -1481,6 +1644,9 @@ const PackageRates = () => {
       const next = { ...prev, rates: { ...prev.rates } };
       ensureRatesPath(next, categoryId, occupancyId);
       const rows = [...next.rates[categoryId].occupancyRates[occupancyId].hotelRows];
+      // Rate column hidden (2026-11-27): back to the original line below.
+      // A new hotel also clears the row's Rate (it belongs to the old room).
+      // rows[rowIndex] = { ...rows[rowIndex], hotelId, roomTypeId: null, hotelTotalRate: null, contractRateStatus: null };
       rows[rowIndex] = { ...rows[rowIndex], hotelId, roomTypeId: null };
       next.rates[categoryId].occupancyRates[occupancyId] = {
         ...next.rates[categoryId].occupancyRates[occupancyId],
@@ -1492,10 +1658,21 @@ const PackageRates = () => {
   };
 
   const updateHotelRowRoomType = (categoryId, occupancyId, rowIndex, roomTypeId) => {
+    // Rate column hidden (2026-11-27): picking a room type no longer looks up
+    // the hotel's Contract Rate; back to the original behaviour below.
+    // const hotelId = formData.rates?.[categoryId]?.occupancyRates?.[occupancyId]?.hotelRows?.[rowIndex]?.hotelId;
     setFormData((prev) => {
       const next = { ...prev, rates: { ...prev.rates } };
       ensureRatesPath(next, categoryId, occupancyId);
       const rows = [...next.rates[categoryId].occupancyRates[occupancyId].hotelRows];
+      // A new room type takes a new Rate: cleared here, then filled from the
+      // hotel's Contract Rate (fillContractRate).
+      // rows[rowIndex] = {
+      //   ...rows[rowIndex],
+      //   roomTypeId: roomTypeId || null,
+      //   hotelTotalRate: null,
+      //   contractRateStatus: hotelId && roomTypeId ? "loading" : null,
+      // };
       rows[rowIndex] = { ...rows[rowIndex], roomTypeId: roomTypeId || null };
       next.rates[categoryId].occupancyRates[occupancyId] = {
         ...next.rates[categoryId].occupancyRates[occupancyId],
@@ -1503,7 +1680,64 @@ const PackageRates = () => {
       };
       return next;
     });
+    // if (hotelId && roomTypeId) fillContractRate(categoryId, occupancyId, rowIndex, hotelId, roomTypeId);
   };
+
+  // Rate column hidden (2026-11-27): setRowContractRate and fillContractRate
+  // are commented out with it.
+  // Puts a looked-up Contract Rate on its row, if the row still has that hotel
+  // and room type. contractRateStatus is shown only (never sent): "loading",
+  // "found", "none" (no contract rate fits) or "error".
+  // const setRowContractRate = (categoryId, occupancyId, rowIndex, hotelId, roomTypeId, total, status) => {
+  //   setFormData((prev) => {
+  //     const row = prev.rates?.[categoryId]?.occupancyRates?.[occupancyId]?.hotelRows?.[rowIndex];
+  //     if (!row || String(row.hotelId) !== String(hotelId) || String(row.roomTypeId) !== String(roomTypeId)) {
+  //       return prev;
+  //     }
+  //     const next = { ...prev, rates: { ...prev.rates } };
+  //     ensureRatesPath(next, categoryId, occupancyId);
+  //     const rows = [...next.rates[categoryId].occupancyRates[occupancyId].hotelRows];
+  //     rows[rowIndex] = { ...rows[rowIndex], hotelTotalRate: total, contractRateStatus: status };
+  //     next.rates[categoryId].occupancyRates[occupancyId] = {
+  //       ...next.rates[categoryId].occupancyRates[occupancyId],
+  //       hotelRows: rows,
+  //     };
+  //     return next;
+  //   });
+  // };
+
+  // In-house hotel picked with a room type: fill the row's Rate with the
+  // hotel's Contract Rate (the lowest live per-night rate for that room, valid
+  // on this rate's Validity From and sold to its Market Type) times this
+  // rate's No of Nights. The rate is fixed (not editable). When no contract
+  // rate fits, the row has none and is charged the shared Hotel Rates.
+  // const fillContractRate = async (categoryId, occupancyId, rowIndex, hotelId, roomTypeId) => {
+  //   const validityFrom = (validityList.find((v) => v.validityFrom)?.validityFrom || "").slice(0, 10);
+  //   try {
+  //     const res = await axiosInstance.get("/api/packageRates/contract-rate", {
+  //       params: {
+  //         hotelId,
+  //         roomCategoryId: roomTypeId,
+  //         date: validityFrom || undefined,
+  //         marketTypeId: formData.markettypeId || undefined,
+  //         nights: parseInt(formData.noOfNights, 10) || 1,
+  //       },
+  //     });
+  //     const data = res.data || {};
+  //     if (!data.found) {
+  //       setRowContractRate(categoryId, occupancyId, rowIndex, hotelId, roomTypeId, null, "none");
+  //       toast(
+  //         `No live contract rate for this room on ${data.date || "the validity date"} for this market type. ` +
+  //           "The shared Hotel Rates will apply to it.",
+  //       );
+  //       return;
+  //     }
+  //     setRowContractRate(categoryId, occupancyId, rowIndex, hotelId, roomTypeId, data.total, "found");
+  //   } catch (error) {
+  //     console.error("Error fetching contract rate:", error);
+  //     setRowContractRate(categoryId, occupancyId, rowIndex, hotelId, roomTypeId, null, "error");
+  //   }
+  // };
 
   // ── Add Hotel & Room Type popup (see quickAdd state) ──
   const sameText = (a, b) =>
@@ -1512,6 +1746,7 @@ const PackageRates = () => {
   const resetQuickAdd = () => {
     setQuickAddHotelName("");
     setQuickAddRoomTypeName("");
+    // setQuickAddRate(""); // Rate column hidden (2026-11-27)
     setQuickAddErrors({});
   };
 
@@ -1522,6 +1757,8 @@ const PackageRates = () => {
       const row = formData.rates?.[categoryId]?.occupancyRates?.[occupancyId]?.hotelRows?.[rowIndex];
       setQuickAddHotelName(row?.hotelName || "");
       setQuickAddRoomTypeName(row?.roomTypeName || "");
+      // Rate column hidden (2026-11-27):
+      // setQuickAddRate(row?.hotelTotalRate != null ? String(row.hotelTotalRate) : "");
     }
     setQuickAdd({ categoryId, occupancyId, rowIndex });
   };
@@ -1537,9 +1774,14 @@ const PackageRates = () => {
     const isEdit = rowIndex != null;
     const hotelName = quickAddHotelName.trim();
     const roomTypeName = quickAddRoomTypeName.trim();
+    // Rate column hidden (2026-11-27): Rate is no longer asked for or required.
+    // const rateText = String(quickAddRate).trim();
+    // const hotelTotalRate = Number(rateText);
     const errs = {};
     if (!hotelName) errs.hotel = "Hotel Name is required";
     if (!roomTypeName) errs.roomType = "Room Type is required";
+    // if (!rateText) errs.rate = "Rate is required";
+    // else if (!Number.isFinite(hotelTotalRate) || hotelTotalRate <= 0) errs.rate = "Enter a rate greater than 0";
     if (Object.keys(errs).length) {
       setQuickAddErrors(errs);
       return;
@@ -1562,8 +1804,9 @@ const PackageRates = () => {
       const rows = next.rates[categoryId].occupancyRates[occupancyId].hotelRows;
       if (isEdit) {
         // Edit keeps the row where it is and only changes its names.
+        // (Rate column hidden, 2026-11-27: hotelTotalRate commented out.)
         const edited = [...rows];
-        edited[rowIndex] = { ...edited[rowIndex], hotelName, roomTypeName };
+        edited[rowIndex] = { ...edited[rowIndex], hotelName, roomTypeName /* , hotelTotalRate */ };
         next.rates[categoryId].occupancyRates[occupancyId] = {
           ...next.rates[categoryId].occupancyRates[occupancyId],
           hotelRows: edited,
@@ -1572,7 +1815,7 @@ const PackageRates = () => {
       }
       // The new typed row goes under the earlier typed rows; the dropdown
       // rows (at least one blank) stay below them.
-      const typedRow = { ...emptyHotelRow(), hotelName, roomTypeName };
+      const typedRow = { ...emptyHotelRow(), hotelName, roomTypeName /* , hotelTotalRate */ };
       next.rates[categoryId].occupancyRates[occupancyId] = {
         ...next.rates[categoryId].occupancyRates[occupancyId],
         hotelRows: withDropdownRow([...rows.filter(isTypedHotelRow), typedRow, ...rows.filter((r) => !isTypedHotelRow(r))]),
@@ -1629,6 +1872,10 @@ const PackageRates = () => {
       return {
         hotelId: row.hotelId || null,
         roomTypeId: row.roomTypeId || null,
+        // Rate column hidden (2026-11-27): no hotel Rate is sent.
+        // Its Rate box (filled from the Contract Rate): the total booking amount.
+        // hotelTotalRate:
+        //   row.hotelTotalRate === "" || row.hotelTotalRate == null ? null : Number(row.hotelTotalRate),
         mealPlan: null,
         ...rates,
       };
@@ -1640,6 +1887,10 @@ const PackageRates = () => {
       roomTypeId: null,
       hotelName,
       roomTypeName: String(row.roomTypeName || "").trim() || null,
+      // Rate column hidden (2026-11-27): no hotel Rate is sent.
+      // Its own Rate from the "+" popup: the total booking amount charged for it.
+      // hotelTotalRate:
+      //   row.hotelTotalRate === "" || row.hotelTotalRate == null ? null : Number(row.hotelTotalRate),
       mealPlan: null,
       ...rates,
     };
@@ -1690,8 +1941,14 @@ const PackageRates = () => {
           hotelRowsMap.set(
             key,
             isTyped
-              ? { ...emptyHotelRow(), hotelName: h.hotelName, roomTypeName: h.roomTypeName || "" }
-              : { hotelId: h.hotelId, roomTypeId: h.roomTypeId || null }
+              ? {
+                  ...emptyHotelRow(),
+                  hotelName: h.hotelName,
+                  roomTypeName: h.roomTypeName || "",
+                  // Rate column hidden (2026-11-27): a saved hotel Rate is not loaded.
+                  // hotelTotalRate: h.hotelTotalRate ?? null,
+                }
+              : { hotelId: h.hotelId, roomTypeId: h.roomTypeId || null /* , hotelTotalRate: h.hotelTotalRate ?? null */ }
           );
         }
         // All hotel rows share one rate — take it from the first row seen.
@@ -2210,7 +2467,9 @@ const PackageRates = () => {
                             <Row>
                               <Col md={6}>
                                 <Form.Group className="mb-3">
-                                  <Form.Label>Minimum Pax</Form.Label>
+                                  <Form.Label>
+                                    Minimum Pax <span className="text-danger">*</span>
+                                  </Form.Label>
                                   <Form.Control
                                     type="number"
                                     placeholder="Enter minimum pax"
@@ -2229,7 +2488,9 @@ const PackageRates = () => {
                               </Col>
                               <Col md={6}>
                                 <Form.Group className="mb-3">
-                                  <Form.Label>Maximum Pax</Form.Label>
+                                  <Form.Label>
+                                    Maximum Pax <span className="text-danger">*</span>
+                                  </Form.Label>
                                   <Form.Control
                                     type="number"
                                     placeholder="Enter maximum pax"
@@ -2467,16 +2728,28 @@ const PackageRates = () => {
                                           </div>
                                           <Row className="g-2">
                                             <Col md={4}>
-                                              <Form.Label className="small mb-1">Per Adult Rate</Form.Label>
+                                              <Form.Label className="small mb-1">
+                                                Per Adult Rate <span className="text-danger">*</span>
+                                              </Form.Label>
                                               <Form.Control
                                                 size="sm"
                                                 type="number"
                                                 value={commonRate.adultRate ?? ""}
-                                                onChange={(e) => updateHotelCommonRate(categoryKey, occ.id, "adultRate", e.target.value)}
+                                                onChange={(e) => {
+                                                  updateHotelCommonRate(categoryKey, occ.id, "adultRate", e.target.value);
+                                                  const errKey = hotelAdultRateErrorKey(categoryKey, occ.id);
+                                                  if (validationErrors[errKey]) {
+                                                    setValidationErrors((prev) => ({ ...prev, [errKey]: "" }));
+                                                  }
+                                                }}
                                                 placeholder="0"
                                                 disabled={viewMode}
                                                 readOnly={viewMode}
+                                                isInvalid={!!validationErrors[hotelAdultRateErrorKey(categoryKey, occ.id)]}
                                               />
+                                              <Form.Control.Feedback type="invalid">
+                                                {validationErrors[hotelAdultRateErrorKey(categoryKey, occ.id)]}
+                                              </Form.Control.Feedback>
                                             </Col>
                                             <Col md={4}>
                                               <Form.Label className="small mb-1">Per Child (With Bed)</Form.Label>
@@ -2525,6 +2798,9 @@ const PackageRates = () => {
                                               <tr className="bg-light">
                                                 <th style={{ minWidth: "220px" }}>Hotel</th>
                                                 <th style={{ minWidth: "180px" }}>Room Type</th>
+                                                {/* Rate column hidden (2026-11-27):
+                                                <th style={{ minWidth: "130px" }}>Rate</th>
+                                                */}
                                                 <th style={{ width: "48px" }}>
                                                   {/* "+" at the end of Room Type — type a hotel name and room type in a popup */}
                                                   {!viewMode && (
@@ -2572,6 +2848,23 @@ const PackageRates = () => {
                                                           disabled={viewMode}
                                                         />
                                                       </td>
+                                                      {/* Rate column hidden (2026-11-27): the typed row's Rate cell.
+                                                      <td>
+                                                        The Rate entered in the "+" popup (changed with Edit).
+                                                        <Form.Control
+                                                          size="sm"
+                                                          type="text"
+                                                          value={
+                                                            row.hotelTotalRate != null && row.hotelTotalRate !== ""
+                                                              ? Number(row.hotelTotalRate).toFixed(2)
+                                                              : ""
+                                                          }
+                                                          readOnly
+                                                          placeholder="Rate"
+                                                          disabled={viewMode}
+                                                        />
+                                                      </td>
+                                                      */}
                                                       <td className="text-end">
                                                         {/* Always removable: removing the last row leaves a
                                                             blank hotel-list row in its place. */}
@@ -2652,6 +2945,36 @@ const PackageRates = () => {
                                                         ))}
                                                       </Form.Select>
                                                     </td>
+                                                    {/* Rate column hidden (2026-11-27): the hotel-list row's Rate cell.
+                                                    <td>
+                                                      In-house hotel: its fixed Contract Rate, filled when the
+                                                      room type is picked (read-only). Charged as the hotel's
+                                                      total; with none, the shared Hotel Rates apply.
+                                                      <Form.Control
+                                                        size="sm"
+                                                        type="text"
+                                                        value={
+                                                          row.hotelTotalRate != null && row.hotelTotalRate !== ""
+                                                            ? Number(row.hotelTotalRate).toFixed(2)
+                                                            : ""
+                                                        }
+                                                        readOnly
+                                                        placeholder={
+                                                          !row.hotelId || !row.roomTypeId
+                                                            ? "Pick room type first"
+                                                            : row.contractRateStatus === "loading"
+                                                            ? "Loading..."
+                                                            : row.contractRateStatus === "none"
+                                                            ? "No contract rate"
+                                                            : row.contractRateStatus === "error"
+                                                            ? "Could not load rate"
+                                                            : "Rate"
+                                                        }
+                                                        title="Fixed from the hotel's Contract Rate"
+                                                        disabled={viewMode}
+                                                      />
+                                                    </td>
+                                                    */}
                                                     <td className="text-end">
                                                       {!viewMode && hotelRows.length > 1 && (
                                                         <Button
@@ -2932,6 +3255,35 @@ const PackageRates = () => {
                     For a hotel that isn't in the hotel list. It is saved with this package rate only.
                   </Form.Text>
                 </Form.Group>
+                {/* Rate column hidden (2026-11-27): the popup's Rate box is off, so Rate is not required.
+                <Form.Group className="mt-3">
+                  <Form.Label>
+                    Rate <span className="text-danger">*</span>
+                  </Form.Label>
+                  <Form.Control
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={quickAddRate}
+                    onChange={(e) => {
+                      setQuickAddRate(e.target.value);
+                      setQuickAddErrors({});
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleQuickAddSave();
+                      }
+                    }}
+                    placeholder="Enter rate"
+                    isInvalid={!!quickAddErrors.rate}
+                  />
+                  <Form.Control.Feedback type="invalid">{quickAddErrors.rate}</Form.Control.Feedback>
+                  <Form.Text className="text-muted">
+                    The rate is the total booking amount for this hotel.
+                  </Form.Text>
+                </Form.Group>
+                */}
               </Form>
             </Modal.Body>
             <Modal.Footer>

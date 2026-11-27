@@ -43,6 +43,7 @@ import {
   FaFileContract,
   FaPlaneDeparture,
   FaExclamationTriangle,
+  FaStar,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -356,6 +357,19 @@ const PackageSearch = () => {
   // Falls back to the full list if the backend didn't send matchedCategoryName.
   const [selectedMatchedCategory, setSelectedMatchedCategory] = useState(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
+  // View modal's "Hotel Details": every hotel added to the package's rates
+  // (hotel-list and typed-in), each with its star rating, whatever the
+  // search's dates and guests. viewHotelsRequestRef drops a reply that
+  // arrives after another View click.
+  const [selectedPackageHotels, setSelectedPackageHotels] = useState([]);
+  const [isPackageHotelsLoading, setIsPackageHotelsLoading] = useState(false);
+  // Currency of the viewed package's search result, for "Final Booking Amount".
+  const [selectedPackageCurrency, setSelectedPackageCurrency] = useState("AED");
+  const viewHotelsRequestRef = useRef(0);
+  // Package whose Next opened the "itinerary is longer than your flight
+  // window" popup on this page (null = popup closed). OK books it, Cancel
+  // stays on the results.
+  const [travelWindowPkg, setTravelWindowPkg] = useState(null);
 
   // ─────────────────────────────────────────────
   // Helper: Debounce function
@@ -749,17 +763,25 @@ const PackageSearch = () => {
     }
   };
 
-  const handleBookNow = (pkg) => {
+  // travelWindowAccepted: true when called from the popup's OK button.
+  const handleBookNow = (pkg, travelWindowAccepted = false) => {
     // Flight Details filter: this package's itinerary is longer than the
     // selected travel window. Warn and let the user accept before booking.
-    if (pkg.exceedsTravelWindow) {
-      const proceed = window.confirm(
-        `${
-          pkg.travelWindowWarning ||
-          "This package's itinerary is longer than your selected flight window."
-        }\n\nDo you want to continue booking this package?`,
-      );
-      if (!proceed) return;
+    // The warning is a popup on this page (the travel-window Modal below)
+    // instead of the browser's own confirm box; its OK calls back here.
+    // Browser confirm replaced (2026-11-27), kept commented out:
+    // if (pkg.exceedsTravelWindow) {
+    //   const proceed = window.confirm(
+    //     `${
+    //       pkg.travelWindowWarning ||
+    //       "This package's itinerary is longer than your selected flight window."
+    //     }\n\nDo you want to continue booking this package?`,
+    //   );
+    //   if (!proceed) return;
+    // }
+    if (pkg.exceedsTravelWindow && !travelWindowAccepted) {
+      setTravelWindowPkg(pkg);
+      return;
     }
 
     // Open the booking page in a new browser tab with a CLEAN URL:
@@ -872,6 +894,31 @@ const PackageSearch = () => {
     const matched = typeof pkgOrId === "object" && pkgOrId !== null
       ? pkgOrId.matchedCategoryName || null
       : null;
+
+    // Hotel Details: every hotel added to the package's rates, loaded
+    // alongside the package view (not tied to the search's dates or guests).
+    const requestId = ++viewHotelsRequestRef.current;
+    setSelectedPackageHotels([]);
+    setSelectedPackageCurrency(
+      (typeof pkgOrId === "object" && pkgOrId !== null && pkgOrId.currencyCode) || "AED",
+    );
+    setIsPackageHotelsLoading(true);
+    axiosInstance
+      .get(`/api/v1/package-booking/package-hotels/${packageId}`)
+      .then((res) => {
+        if (requestId === viewHotelsRequestRef.current) {
+          setSelectedPackageHotels(Array.isArray(res.data) ? res.data : []);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching package hotels:", error);
+      })
+      .finally(() => {
+        if (requestId === viewHotelsRequestRef.current) {
+          setIsPackageHotelsLoading(false);
+        }
+      });
+
     try {
       setIsDetailLoading(true);
       setSelectedPackage(null);
@@ -2152,6 +2199,88 @@ const PackageSearch = () => {
                   </section>
                 )}
 
+                {/* ─── Hotel Details ─────────────────────────────── */}
+                {/* Every hotel added to this package's rates (hotel-list and
+                    typed-in with the "+" popup), with each hotel's star
+                    rating from the hotel master (its Hotel Category). */}
+                <section className="detail-section">
+                  <h6 className="section-title">
+                    <FaHotel className="me-2 text-danger" />
+                    Hotel Details
+                  </h6>
+                  {isPackageHotelsLoading ? (
+                    <div className="small text-muted">
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Loading hotels...
+                    </div>
+                  ) : selectedPackageHotels.length > 0 ? (
+                    <div className="details-grid-card">
+                      {selectedPackageHotels.map((hotel, idx) => {
+                        // "5 Star" -> 5 stars; any other category name is shown as text.
+                        const stars = parseInt(hotel.starRating, 10);
+                        return (
+                          <Row
+                            key={
+                              hotel.hotelId != null
+                                ? `id:${hotel.hotelId}:${hotel.roomTypeId ?? ""}`
+                                : `typed:${hotel.rateHotelId ?? idx}`
+                            }
+                            className={`g-3 ${idx > 0 ? "border-top pt-2 mt-2" : ""}`}
+                          >
+                            <Col md={6}>
+                              <div className="info-row">
+                                <span className="info-label">Hotel</span>
+                                <span className="info-value">{hotel.hotelName || "-"}</span>
+                              </div>
+                              <div className="info-row">
+                                <span className="info-label">Location</span>
+                                <span className="info-value">{hotel.stateName || "-"}</span>
+                              </div>
+                            </Col>
+                            <Col md={6}>
+                              <div className="info-row">
+                                <span className="info-label">Room Type</span>
+                                <span className="info-value">{hotel.roomTypeName || "-"}</span>
+                              </div>
+                              <div className="info-row">
+                                <span className="info-label">Rating</span>
+                                <span className="info-value" title={hotel.starRating || ""}>
+                                  {Number.isFinite(stars) && stars > 0 && stars <= 7
+                                    ? Array.from({ length: stars }).map((_, i) => (
+                                        <FaStar key={i} className="ms-1" style={{ color: "#f5a623" }} />
+                                      ))
+                                    : hotel.starRating || "Not rated"}
+                                </span>
+                              </div>
+                            </Col>
+                            {/* A hotel with its own Rate on Package Rates (typed in with
+                                the "+" popup, or an in-house hotel's Contract Rate):
+                                that rate is what the booking charges. */}
+                            {hotel.hotelTotalRate != null && (
+                              <Col md={12}>
+                                <div className="info-row">
+                                  <span className="info-label">Final Booking Amount</span>
+                                  <span className="info-value fw-bold">
+                                    {selectedPackageCurrency}{" "}
+                                    {Number(hotel.hotelTotalRate).toLocaleString(undefined, {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
+                                  </span>
+                                </div>
+                              </Col>
+                            )}
+                          </Row>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="small text-muted fst-italic">
+                      No hotels added to this package yet.
+                    </div>
+                  )}
+                </section>
+
                 {/* ─── Itinerary ─────────────────────────────────── */}
                 <section className="detail-section">
                   <h6 className="section-title">
@@ -2333,6 +2462,53 @@ const PackageSearch = () => {
               Book Now
             </Button>
           )} */}
+        </Modal.Footer>
+      </Modal>
+
+      {/* Travel-window warning popup — opened by Next when the package's
+          itinerary runs longer than the searched flight window (see
+          handleBookNow). Same message and choices the browser confirm box
+          showed: OK opens the booking, Cancel stays here. */}
+      <Modal
+        show={!!travelWindowPkg}
+        onHide={() => setTravelWindowPkg(null)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title className="fs-6 fw-bold">
+            {travelWindowPkg?.packageName || "Package"}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="alert alert-warning small mb-3" role="alert">
+            {travelWindowPkg?.travelWindowWarning ||
+              "This package's itinerary is longer than your selected flight window."}
+          </div>
+          <p className="mb-0">Do you want to continue booking this package?</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            className="px-3 rounded-pill"
+            onClick={() => setTravelWindowPkg(null)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            className="px-3 rounded-pill"
+            onClick={() => {
+              // Booked straight from this click, so the new tab opened by
+              // handleBookNow is not blocked as a popup.
+              const pkg = travelWindowPkg;
+              setTravelWindowPkg(null);
+              if (pkg) handleBookNow(pkg, true);
+            }}
+          >
+            OK
+          </Button>
         </Modal.Footer>
       </Modal>
 

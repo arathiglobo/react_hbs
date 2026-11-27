@@ -167,6 +167,10 @@ const PackageBooking = () => {
     searchParams: {
       packageId: id,
       travelDate: initialTravelDate,
+      // The searched departure day (yyyy-MM-dd). The Hotels step then accepts
+      // a rate whose validity overlaps the stay, the same rule the package
+      // search used to list this package.
+      departureDate: toIsoDate(searchContext.departureDateTime) || "",
       adultCount: Number(searchAdultCount) > 0 ? Number(searchAdultCount) : 1,
       childCount: Number(searchChildCount) >= 0 ? Number(searchChildCount) : 0,
       infantCount: 0,

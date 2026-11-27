@@ -196,7 +196,7 @@ export default function MeetAndSpaceBookingDetailView() {
     setDocPdfUrl("");
     try {
       const res = await axiosInstance.get(
-        `api/meet_and_space_booking/${data.id}/pdf?type=${type}`,
+        `/api/meet_and_space_booking/${data.id}/pdf?type=${type}`,
       );
       if (res.data && res.data.status === "SUCCESS" && res.data.pdfUrl) {
         setDocPdfUrl(res.data.pdfUrl);

@@ -32,6 +32,8 @@ import {
   FaArrowLeft,
   FaArrowRight,
   FaCheck,
+  // FaSearch, // Search button removed (2026-11-27)
+  FaTimes,
 } from "react-icons/fa";
 import DateTimeApplyPicker, {
   parseLocalDateTime,
@@ -289,6 +291,11 @@ const PackageReg = () => {
   const countryDebounceRef = useRef(null);
   const placeDebounceRef = useRef(null);
   const itineraryPlaceDebounceRef = useRef(null);
+  // Packages list search box: the typing pause before the list reloads, and
+  // the id of the newest list request (an older reply arriving later is
+  // ignored, so the list always matches what is in the box).
+  const packageSearchDebounceRef = useRef(null);
+  const packageListRequestRef = useRef(0);
 
   // ── Selected-place name cache ────────────────────────────────────────
   // `places` is ONE list shared by Arrive City and every itinerary day's
@@ -575,7 +582,10 @@ const PackageReg = () => {
     setShowModal(true);
   };
 
-  const fetchPackageList = async (pageNum = 0, searchTerm = search) => {
+  // freshList: a new Search / clear, so the page count starts over instead of
+  // keeping the previous list's (larger) count.
+  const fetchPackageList = async (pageNum = 0, searchTerm = search, freshList = false) => {
+    const requestId = ++packageListRequestRef.current;
     setIsLoading(true);
     try {
       const params = new URLSearchParams({
@@ -591,13 +601,16 @@ const PackageReg = () => {
         `/api/TravelPackage?${params.toString()}`
       );
       console.log("package  list :::", res);
+      // A newer request (eg. more letters typed in the search box) replaced
+      // this one: leave the list to it.
+      if (requestId !== packageListRequestRef.current) return;
 
       if (res.data && Array.isArray(res.data)) {
         setItems(res.data);
         if (res.data.length < 10) {
           setTotalPages(pageNum + 1);
         } else {
-          setTotalPages(Math.max(totalPages, pageNum + 2));
+          setTotalPages(freshList ? pageNum + 2 : Math.max(totalPages, pageNum + 2));
         }
         setPage(pageNum);
       } else {
@@ -606,14 +619,46 @@ const PackageReg = () => {
         setPage(0);
       }
     } catch (err) {
+      if (requestId !== packageListRequestRef.current) return;
       toast.error("Failed to load cab providers");
       setItems([]);
       setTotalPages(0);
       setPage(0);
     } finally {
-      setIsLoading(false);
+      if (requestId === packageListRequestRef.current) setIsLoading(false);
     }
   };
+
+  // Packages list search box: the list filters by Package Name / Package
+  // Code as the user types (after a short pause), from page 1. The pager then
+  // keeps using that applied term (search). The × clears it and lists every
+  // package. (The Search button was removed: typing is enough.)
+  const handlePackageSearch = (text = searchTerm) => {
+    const term = String(text || "").trim();
+    setSearch(term);
+    fetchPackageList(0, term, true);
+  };
+
+  const handlePackageSearchChange = (value) => {
+    setSearchTerm(value);
+    if (packageSearchDebounceRef.current) clearTimeout(packageSearchDebounceRef.current);
+    packageSearchDebounceRef.current = setTimeout(() => handlePackageSearch(value), 400);
+  };
+
+  const clearPackageSearch = () => {
+    if (packageSearchDebounceRef.current) clearTimeout(packageSearchDebounceRef.current);
+    setSearchTerm("");
+    setSearch("");
+    fetchPackageList(0, "", true);
+  };
+
+  // No list reload after leaving the page mid-typing.
+  useEffect(
+    () => () => {
+      if (packageSearchDebounceRef.current) clearTimeout(packageSearchDebounceRef.current);
+    },
+    []
+  );
 
   useEffect(() => {
     fetchPackageList();
@@ -770,7 +815,14 @@ const PackageReg = () => {
       );
     });
 
-    formDataPayload.append("liveStatus", formData.status === "true" ? 1 : 0);
+    // A new package starts as "Enable" (the Status dropdown was removed from
+    // this form), which means Active; it used to be saved as InActive, so it
+    // never showed under New Booking until switched on from the list. Editing
+    // keeps the package's own status ("true" / "false", set on load).
+    formDataPayload.append(
+      "liveStatus",
+      formData.status === "true" || formData.status === "Enable" ? 1 : 0
+    );
 
     // Only send the main package image as a binary when the user picked a new
     // file (File object). On edit, formData.packageImage may be the string
@@ -1117,7 +1169,7 @@ const PackageReg = () => {
     if (!selectedPackage) return;
     try {
       setIsLoading(true);
-      // Determine the new status (if liveStatus is false, it's currently Active, so toggle to true for InActive)
+      // liveStatus true = Active, so the new status is the opposite of the current one.
       const newStatus = !selectedPackage.liveStatus;
       
       const res = await axiosInstance.patch(
@@ -1126,7 +1178,7 @@ const PackageReg = () => {
       );
 
       if (res.data) {
-        toast.success(`Package ${newStatus ? 'deactivated' : 'activated'} successfully`);
+        toast.success(`Package ${newStatus ? 'activated' : 'deactivated'} successfully`);
       }
 
       await fetchPackageList(page, search);
@@ -1956,8 +2008,11 @@ const PackageReg = () => {
           </div>
 
           <Card className="shadow-sm rounded-xl">
-            <Card.Header className="d-flex justify-content-between align-items-center">
-              <div>
+            {/* Three parts: title (left), search box (centred), + Create (right).
+                The two sides share the leftover width equally, which keeps the
+                search box in the middle of the header. */}
+            <Card.Header className="d-flex justify-content-between align-items-center gap-3 flex-wrap">
+              <div style={{ flex: "1 1 0" }}>
                 {/* <Button
                   variant="outline-primary"
                   onClick={() => navigate(-1)}
@@ -1972,9 +2027,59 @@ const PackageReg = () => {
                   Packages
                 </span>
               </div>
-              <Button className="btn-green" onClick={handleCreate}>
-                + Create
-              </Button>
+              {/* Search by Package Name or Package Code — the list filters as
+                  the user types; the × clears it. */}
+              <div className="position-relative" style={{ flex: "0 1 380px", minWidth: 240 }}>
+                <Form.Control
+                  type="text"
+                  placeholder="Package Name or Package Code"
+                  value={searchTerm}
+                  onChange={(e) => handlePackageSearchChange(e.target.value)}
+                  // Same 40px height as the "+ Create" button beside it. Set
+                  // inline because other pages' stylesheets (Login.css,
+                  // PackageBooking_Stepper.css) make every .form-control taller
+                  // once they have loaded.
+                  style={{
+                    height: 40,
+                    paddingTop: 0,
+                    paddingBottom: 0,
+                    paddingRight: searchTerm ? 34 : undefined,
+                  }}
+                  aria-label="Search by Package Name or Package Code"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                    style={{ border: "none", background: "none", color: "#6c757d", padding: "0 10px" }}
+                    onClick={clearPackageSearch}
+                    title="Clear search"
+                    aria-label="Clear search"
+                  >
+                    <FaTimes />
+                  </button>
+                )}
+              </div>
+              <div className="d-flex justify-content-end align-items-center gap-2" style={{ flex: "1 1 0" }}>
+                {/* Search button removed (2026-11-27): the list filters as you
+                    type. Kept commented out:
+                <Button
+                  className="btn-green d-inline-flex align-items-center gap-1"
+                  onClick={handlePackageSearch}
+                  disabled={isLoading}
+                >
+                  <FaSearch /> Search
+                </Button>
+                */}
+                {/* Fixed 40px tall, the same as the search box. */}
+                <Button
+                  className="btn-green d-inline-flex align-items-center"
+                  style={{ height: 40 }}
+                  onClick={handleCreate}
+                >
+                  + Create
+                </Button>
+              </div>
             </Card.Header>
             <Card.Body className="p-0">
               <Table responsive hover striped className="mb-0 align-middle">

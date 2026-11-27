@@ -17,10 +17,25 @@ import {
 } from "react-icons/fa";
 import { selectedSupplierHotel } from "../supplierHotels";
 
+// One key per hotel card. The backend sends one card per hotel and room type,
+// so a hotel-master hotel is keyed by its hotelId and roomTypeId (the same
+// hotel with two room types is two cards, picked separately). A hotel typed in
+// on the PackageRates form (customHotel) has no hotelId, so it is keyed by the
+// rate row it came from (rateHotelId).
+const hotelKey = (hotel) =>
+  hotel?.hotelId != null
+    ? `id:${hotel.hotelId}:${hotel.roomTypeId ?? ""}`
+    : `typed:${hotel?.rateHotelId ?? hotel?.hotelName ?? ""}`;
+const sameHotelName = (a, b) =>
+  String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+
 const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFixed, bookingData, programme, updateData, updateProgramme, packageRate, onPackageRateResolved, onPrev, onNext }) => {
   const [hotels, setHotels] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  // When no hotels come back: why, from /hotel-details/why-none (one line per
+  // package rate that doesn't fit this search), shown under "No hotels found".
+  const [noHotelReasons, setNoHotelReasons] = useState([]);
   const [packageView, setPackageView] = useState(null);
   const [isPackageLoading, setIsPackageLoading] = useState(false);
   // Per-day expand/collapse state for the Day-wise Itinerary accordion.
@@ -31,7 +46,8 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
   // Hotel selection. The user is encouraged to pick a hotel — it is NOT
   // auto-selected. If they press Next without one, a warning popup asks them
   // to acknowledge (via a checkbox) before proceeding.
-  const [selectedHotelId, setSelectedHotelId] = useState(null);
+  // Holds the selected card's hotelKey (see top of file).
+  const [selectedHotelKey, setSelectedHotelKey] = useState(null);
   const [showNoHotelModal, setShowNoHotelModal] = useState(false);
   const [ackNoHotel, setAckNoHotel] = useState(false);
 
@@ -90,11 +106,15 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
     try {
       setIsLoading(true);
       setHasSearched(true);
+      setNoHotelReasons([]);
       const payload = {
         countryId: searchParams.destinationCountryId || "",
         packageid: searchParams.packageId || "",
         packageCategoryid: searchParams.packageCategory || "",
         travelDate: formatDateForApi(searchParams.travelDate) || "",
+        // Searched departure day: rates whose validity overlaps the stay count,
+        // as on the package search (blank = valid on the travel date).
+        departureDate: formatDateForApi(searchParams.departureDate) || "",
         adultCount: String(searchParams.adultCount || 1),
         childCount: String(searchParams.childCount || 0),
         infantCount: String(searchParams.infantCount || 0),
@@ -129,6 +149,13 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
 
       if (!rows.length) {
         toast.error("No hotels available for the selected criteria.");
+        // Ask the server why (dates, country, sharing type, guests, no hotels).
+        try {
+          const why = await axiosInstance.post("/api/v1/package-booking/hotel-details/why-none", payload);
+          setNoHotelReasons(Array.isArray(why.data) ? why.data : []);
+        } catch (whyError) {
+          console.error("Error explaining missing hotels:", whyError);
+        }
       } else {
         toast.success(`Found ${rows.length} hotels.`);
       }
@@ -147,14 +174,25 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
   // re-fetched fresh each time, so match by code rather than object identity).
   useEffect(() => {
     if (!hotels.length) return;
-    const existing =
+    const saved =
       Array.isArray(bookingData?.selectedHotels) &&
       bookingData.selectedHotels.length === 1
-        ? bookingData.selectedHotels[0]?.hotelId
+        ? bookingData.selectedHotels[0]
         : null;
-    if (existing != null && hotels.some((h) => h.hotelId === existing)) {
-      setSelectedHotelId(existing);
-      const hotel = hotels.find((h) => h.hotelId === existing);
+    const existing = saved?.hotelId ?? null;
+    // Coming back to this step, the pick still holds its room type, so the
+    // exact card is found first. A saved booking keeps only the hotel, so the
+    // first card of that hotel is used. A typed-in hotel (no hotelId) is found
+    // again by its name. A live supplier hotel is never one of these cards.
+    const hotel =
+      existing != null
+        ? hotels.find((h) => hotelKey(h) === hotelKey(saved)) ||
+          hotels.find((h) => h.hotelId === existing)
+        : saved && !saved.supplier && saved.hotelName
+        ? hotels.find((h) => h.customHotel && sameHotelName(h.hotelName, saved.hotelName))
+        : null;
+    if (hotel) {
+      setSelectedHotelKey(hotelKey(hotel));
       const savedPlanCode = bookingData?.selectedMealPlan?.mealPlan;
       if (savedPlanCode && Array.isArray(hotel?.mealPlans)) {
         const match = hotel.mealPlans.find((p) => p.mealPlan === savedPlanCode);
@@ -172,8 +210,8 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
   // updateData so the Total Price sidebar and the /book payload stay in
   // sync with what's visible on the row.
   const selectHotel = (hotel) => {
-    if (selectedHotelId === hotel.hotelId) {
-      setSelectedHotelId(null);
+    if (selectedHotelKey === hotelKey(hotel)) {
+      setSelectedHotelKey(null);
       setSelectedMealPlan(null);
       updateData({
         selectedHotels: [],
@@ -183,7 +221,7 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
       });
       return;
     }
-    setSelectedHotelId(hotel.hotelId);
+    setSelectedHotelKey(hotelKey(hotel));
     // Switching hotels drops any meal-plan pick — plans are scoped to the
     // hotel's category + occupancy and the new hotel may not offer the same
     // set (or any set at all).
@@ -235,7 +273,7 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
   // stop; onNext (which navigates to the checkout tab) only fires when
   // a hotel (own or supplier) is selected.
   const handleNext = () => {
-    if (!selectedHotelId && !selectedSupplier) {
+    if (!selectedHotelKey && !selectedSupplier) {
       toast.error("Please select a hotel to continue.");
       return;
     }
@@ -438,10 +476,10 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
             ) : hasSearched && filteredHotels.length > 0 ? (
               <div className="d-flex flex-column gap-3">
                 {filteredHotels.map((hotel) => {
-                  const isSelected = selectedHotelId === hotel.hotelId;
+                  const isSelected = selectedHotelKey === hotelKey(hotel);
                   return (
                     <div
-                      key={hotel.hotelId}
+                      key={hotelKey(hotel)}
                       className={`room-category-item ${isSelected ? "pkg-hotel-selected" : ""}`}
                     >
                       <div
@@ -556,7 +594,7 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
                                   <span className="d-flex align-items-center gap-2">
                                     <Form.Check
                                       type="radio"
-                                      name={`mealplan-${hotel.hotelId}`}
+                                      name={`mealplan-${hotelKey(hotel)}`}
                                       checked={planSelected}
                                       onChange={() => selectMealPlan(hotel, plan)}
                                     />
@@ -596,7 +634,15 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
               <div className="prg-empty-state">
                 <FaHotel size={28} />
                 <p className="mb-0 mt-2 fw-semibold">No hotels found</p>
-                <p className="small text-muted">Try adjusting your search criteria.</p>
+                {noHotelReasons.length > 0 ? (
+                  <ul className="small text-muted text-start mt-2 mb-0">
+                    {noHotelReasons.map((reason, idx) => (
+                      <li key={idx}>{reason}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="small text-muted">Try adjusting your search criteria.</p>
+                )}
               </div>
             ) : (
               <div className="prg-empty-state">

@@ -312,7 +312,7 @@ const OfflineBookingList = () => {
       }
 
       const response = await axiosInstance.get(
-        "api/v1/offline-booking/all-list",
+        "/api/v1/offline-booking/all-list",
         { params },
       );
 
